@@ -1,0 +1,136 @@
+# =============================================
+# docker-compose.yml — Cinema Management System
+# Orchestrates: MySQL + Redis + Backend + Frontend
+# =============================================
+#
+# CÁCH SỬ DỤNG:
+#   Build & Start:  docker-compose up --build -d
+#   Xem logs:       docker-compose logs -f backend
+#   Dừng lại:       docker-compose down
+#   Xóa toàn bộ:   docker-compose down -v  (cẩn thận: xóa cả data DB!)
+#
+
+name: cinema-system
+
+services:
+
+  # ── 1. DATABASE ──────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: cinema_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: cinema_root_2026
+      MYSQL_DATABASE: cinema_db
+      MYSQL_USER: cinema_user
+      MYSQL_PASSWORD: cinema_pass_2026
+    ports:
+      - "3307:3306"  # Map ra 3307 để không đụng MySQL local đang chạy trên 3306
+    volumes:
+      # Tự động import schema + data lần chạy đầu tiên
+      - ./cinema-node/database/cinema_db.sql:/docker-entrypoint-initdb.d/01_cinema_db.sql:ro
+      # Lưu data DB bền vững (không mất khi restart)
+      - cinema_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pcinema_root_2026"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - cinema_network
+
+  # ── 2. CACHE / MESSAGE QUEUE ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: cinema_redis_app
+    restart: unless-stopped
+    command: redis-server --requirepass cinema_redis_2026
+    ports:
+      - "6381:6379"  # Map ra 6381 để không đụng container redis cũ
+    volumes:
+      - cinema_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "cinema_redis_2026", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cinema_network
+
+  # ── 3. BACKEND (Node.js / Express) ───────────────────────────────────────
+  backend:
+    build:
+      context: ./cinema-node
+      dockerfile: Dockerfile
+    container_name: cinema_backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy  # Chờ MySQL sẵn sàng THỰC SỰ mới chạy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 8000
+
+      # ── Database ──────────────────────────────────────────────────────
+      # QUAN TRỌNG: Dùng tên service "mysql" thay vì "localhost"
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: cinema_db
+      DB_USER: root
+      DB_PASS: cinema_root_2026
+
+      # ── Redis ─────────────────────────────────────────────────────────
+      # QUAN TRỌNG: Dùng tên service "redis" thay vì "127.0.0.1"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: cinema_redis_2026
+
+      # Ghi đè UPLOAD_DIR để lưu trong container path
+      UPLOAD_DIR: public/uploads/posters
+    env_file:
+      - ./cinema-node/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount thư mục uploads ra ngoài để ảnh không bị xóa khi rebuild container
+      - cinema_uploads:/app/public/uploads
+    networks:
+      - cinema_network
+
+  # ── 4. FRONTEND (React / Vite → Nginx) ───────────────────────────────────
+  frontend:
+    build:
+      context: ./cinema-frontend
+      dockerfile: Dockerfile
+      args:
+        # Truyền URL backend vào lúc build (Vite nhúng vào bundle)
+        # Trong môi trường Docker, trình duyệt của USER cần truy cập được
+        # → Dùng localhost (hoặc IP máy chủ nếu deploy lên server thật)
+        VITE_API_URL: /api
+        VITE_SOCKET_URL: /
+    container_name: cinema_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - cinema_network
+
+# ── VOLUMES ──────────────────────────────────────────────────────────────────
+volumes:
+  cinema_mysql_data:
+    name: cinema_mysql_data
+  cinema_redis_data:
+    name: cinema_redis_data
+  cinema_uploads:
+    name: cinema_uploads
+
+# ── NETWORKS ─────────────────────────────────────────────────────────────────
+networks:
+  cinema_network:
+    name: cinema_network
+    driver: bridge
