@@ -13,8 +13,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../../config/database.js';
 import { WebhookRepository } from './webhook.repository.js';
+import { LoyaltyService } from '../loyalty/loyalty.service.js';
+import { NotificationService } from '../notification/notification.service.js';
 import { emitSeatStatus } from '../seat-lock/seat-lock.service.js';
 import { emailQueue } from '../../workers/email.worker.js';
+import { AuditRepository } from '../audit/audit.repository.js';
 
 let _io = null;
 export const setWebhookIo = (io) => { _io = io; };
@@ -85,6 +88,8 @@ const handleBankIPN = async ({ amount, description, transactionId, bankCode }) =
         });
       }
 
+      AuditRepository.log({ userId: bookingUserId, action: 'payment.late', entityType: 'booking', entityId: bookingId, details: { amount: Number(amount), transactionId } }).catch(() => {});
+
       return {
         success:  false,
         refund:   true,
@@ -122,6 +127,60 @@ const handleBankIPN = async ({ amount, description, transactionId, bankCode }) =
 
     await conn.commit();
     console.log(`[Webhook] ✅ Booking #${bookingId} xác nhận thanh toán thành công.`);
+
+    AuditRepository.log({ userId: bookingUserId, action: 'payment.confirmed', entityType: 'booking', entityId: bookingId, details: { amount: booking.totalAmount, transactionId } }).catch(() => {});
+
+    // ── BƯỚC 6: LOYALTY — Tích điểm + Auto-upgrade (sau commit) ──────
+    // Chạy trong transaction riêng để không ảnh hưởng payment flow
+    try {
+      const loyaltyConn = await (await import('../../config/database.js')).default.getConnection();
+      try {
+        await loyaltyConn.beginTransaction();
+        const loyaltyResult = await LoyaltyService.onPaymentSuccess(loyaltyConn, bookingUserId, bookingId, booking.totalAmount);
+        await loyaltyConn.commit();
+
+        if (loyaltyResult) {
+          console.log(`[Webhook] 🎖️ Loyalty: +${loyaltyResult.pointsEarned} điểm cho user #${bookingUserId} (tổng: ${loyaltyResult.newPoints})`);
+          if (loyaltyResult.tierUpgraded) {
+            console.log(`[Webhook] 🏆 User #${bookingUserId} lên hạng ${loyaltyResult.newTier}!`);
+            // Emit tier upgrade event
+            if (_io) {
+              _io.to(`user:${bookingUserId}`).emit('loyalty:tier_upgrade', {
+                newTier: loyaltyResult.newTier,
+                message: `🏆 Chúc mừng! Bạn đã lên hạng ${loyaltyResult.newTier.toUpperCase()}!`,
+              });
+            }
+          }
+          // Emit loyalty update
+          if (_io) {
+            _io.to(`user:${bookingUserId}`).emit('loyalty:points_earned', {
+              pointsEarned: loyaltyResult.pointsEarned,
+              newPoints: loyaltyResult.newPoints,
+              message: `+${loyaltyResult.pointsEarned} điểm tích lũy`,
+            });
+          }
+        }
+      } catch (loyaltyErr) {
+        await loyaltyConn.rollback();
+        console.warn('[Webhook] ⚠️ Loyalty earn failed (không ảnh hưởng payment):', loyaltyErr.message);
+      } finally {
+        loyaltyConn.release();
+      }
+    } catch (poolErr) {
+      console.warn('[Webhook] ⚠️ Không kết nối được DB cho loyalty:', poolErr.message);
+    }
+
+    // ── BƯỚC 7: NOTIFICATIONS — Ghi notification vào DB ──────────────
+    try {
+      await NotificationService.send(
+        bookingUserId, 'payment',
+        'Thanh toán thành công!',
+        `Đơn hàng #${bookingId} đã được xác nhận. Vui lòng đưa mã QR cho nhân viên soát vé.`,
+        { bookingId, action: 'view_ticket' }
+      );
+    } catch (notifErr) {
+      console.warn('[Webhook] ⚠️ Notification failed:', notifErr.message);
+    }
 
     // ── BƯỚC 6: REAL-TIME EVENTS (sau commit) ───────────────────────
     if (_io) {

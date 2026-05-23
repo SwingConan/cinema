@@ -5,7 +5,8 @@ import socket, { joinShowtime, leaveShowtime } from "../../utils/socket";
 import { useAuth } from "../../contexts/AuthContext";
 import SeatMap from "../../components/customer/SeatMap";
 import ConcessionStep from "../../components/booking/ConcessionStep";
-import { Clock, Navigation, CheckCircle2, Ticket, QrCode, X, Loader2, Coffee } from "lucide-react";
+import PasscodeModal from "../../components/customer/PasscodeModal";
+import { Clock, Navigation, CheckCircle2, Ticket, QrCode, X, Loader2, Coffee, Tag } from "lucide-react";
 
 export default function BookingPage() {
   const { showtimeId } = useParams();
@@ -18,6 +19,13 @@ export default function BookingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [pendingBookingId, setPendingBookingId] = useState(null);
+  const [showPasscode, setShowPasscode] = useState(false);
+  const [securityToken, setSecurityToken] = useState(null);
+  const [myVouchers, setMyVouchers] = useState([]);
+  const [voucherCode, setVoucherCode] = useState("");
+  const [voucherValidation, setVoucherValidation] = useState(null);
+  const [voucherError, setVoucherError] = useState("");
+  const [voucherLoading, setVoucherLoading] = useState(false);
 
   // ── STEP & CONCESSIONS STATE ──────────────────────────────────
   // step 1: Chọn ghế | step 2: Chọn bắp nước | step 3: QR thanh toán
@@ -249,8 +257,44 @@ export default function BookingPage() {
     );
 
   const calculateTotal = () => calculateSeatTotal() + calculateConcessionTotal();
+  const calculatePayableTotal = () => Math.max(0, calculateTotal() - (voucherValidation?.discountAmount || 0));
 
-  const handleCheckout = async () => {
+  useEffect(() => {
+    if (step !== 3 || !user) return;
+    api.get("/customer/vouchers/my-vouchers")
+      .then((res) => setMyVouchers(Array.isArray(res.data) ? res.data : (res.data?.data ?? [])))
+      .catch((err) => console.error("Voucher fetch error:", err));
+  }, [step, user]);
+
+  useEffect(() => {
+    setVoucherValidation(null);
+    setVoucherError("");
+  }, [selectedSeats, selectedConcessions]);
+
+  const handleApplyVoucher = async (code = voucherCode) => {
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    if (!normalizedCode) {
+      setVoucherError("Vui lòng nhập mã voucher.");
+      return;
+    }
+    setVoucherLoading(true);
+    setVoucherError("");
+    try {
+      const res = await api.post("/customer/vouchers/validate", {
+        code: normalizedCode,
+        orderAmount: calculateTotal(),
+      });
+      setVoucherCode(normalizedCode);
+      setVoucherValidation(res.data);
+    } catch (err) {
+      setVoucherValidation(null);
+      setVoucherError(err.response?.data?.message || "Không thể áp dụng voucher.");
+    } finally {
+      setVoucherLoading(false);
+    }
+  };
+
+  const handleCheckout = async (overrideToken) => {
     if (!user) {
       alert("Vui lòng đăng nhập để tiếp tục đặt vé.");
       navigate("/login");
@@ -260,6 +304,10 @@ export default function BookingPage() {
 
     setIsSubmitting(true);
     setError("");
+
+    // Resolve token: prefer overrideToken (string only), then state
+    const token = (typeof overrideToken === 'string') ? overrideToken : (typeof securityToken === 'string' ? securityToken : null);
+    const headers = token ? { 'X-Security-Token': token } : {};
 
     try {
       // Build concessions payload từ Map
@@ -271,7 +319,8 @@ export default function BookingPage() {
         showtime_id:  showtimeId,
         seat_ids:     selectedSeats.map((s) => s.id),
         concessions:  concessionsPayload,
-      });
+        voucher_code: voucherValidation?.voucher?.code || null,
+      }, { headers });
 
       const { id: bookingId, vietQrUrl, totalAmount } = res.data;
 
@@ -286,6 +335,8 @@ export default function BookingPage() {
         });
         setSelectedSeats([]);
         setSelectedConcessions(new Map());
+        setVoucherCode("");
+        setVoucherValidation(null);
         setStep(1);
         sessionStorage.removeItem(`booking_seats_${showtimeId}`);
       } else {
@@ -293,6 +344,11 @@ export default function BookingPage() {
       }
     } catch (err) {
       console.error("Checkout error:", err);
+      if (err.response?.status === 428 && err.response?.data?.requirePasscode) {
+        setShowPasscode(true);
+        setIsSubmitting(false);
+        return;
+      }
       setError(err.response?.data?.message || "Có lỗi xảy ra khi xử lý thanh toán.");
       fetchShowtimeData();
       setSelectedSeats([]);
@@ -424,6 +480,28 @@ export default function BookingPage() {
                 {room.type}
               </span>
             </div>
+
+            {/* Render dynamic pricing applied rules badges */}
+            {showtime.appliedRules && showtime.appliedRules.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {showtime.appliedRules.map((rule, idx) => {
+                  const isDiscount = rule.value < 0;
+                  const icon = isDiscount ? "☀️" : "⭐";
+                  const colorClass = isDiscount
+                    ? "bg-green-950/60 text-green-400 border-green-800/40"
+                    : "bg-yellow-950/60 text-yellow-400 border-yellow-800/40";
+                  return (
+                    <span
+                      key={idx}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${colorClass}`}
+                    >
+                      <span>{icon}</span>
+                      <span>{rule.name}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -556,9 +634,75 @@ export default function BookingPage() {
                   )}
                 </div>
 
+                {step === 3 && (
+                  <div className="mb-5 rounded-xl border border-[#333] bg-[#111] p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                        <Tag className="w-4 h-4 text-[#E50914]" /> Voucher
+                      </p>
+                      {voucherValidation && (
+                        <button
+                          onClick={() => { setVoucherValidation(null); setVoucherCode(""); setVoucherError(""); }}
+                          className="text-xs font-bold text-gray-500 hover:text-red-400"
+                        >
+                          Bỏ áp dụng
+                        </button>
+                      )}
+                    </div>
+
+                    {myVouchers.length > 0 && (
+                      <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                        {myVouchers.map((voucher) => (
+                          <button
+                            key={voucher.id}
+                            onClick={() => handleApplyVoucher(voucher.code)}
+                            disabled={voucherLoading}
+                            className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${
+                              voucherValidation?.voucher?.id === voucher.id
+                                ? "border-emerald-500 bg-emerald-950/20"
+                                : "border-[#2a2a2a] bg-black/30 hover:border-[#E50914]"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-mono text-sm font-black text-white">{voucher.code}</span>
+                              <span className="text-xs font-black text-emerald-400">
+                                -{formatCurrency(voucher.discountValue)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-500 truncate">{voucher.name}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <input
+                        value={voucherCode}
+                        onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                        placeholder="Nhập mã voucher"
+                        className="min-w-0 flex-1 rounded-lg border border-[#333] bg-black px-3 py-2 text-sm font-bold text-white outline-none focus:border-[#E50914]"
+                      />
+                      <button
+                        onClick={() => handleApplyVoucher()}
+                        disabled={voucherLoading}
+                        className="rounded-lg bg-[#E50914] px-3 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
+                      >
+                        {voucherLoading ? "..." : "Áp dụng"}
+                      </button>
+                    </div>
+
+                    {voucherError && <p className="text-xs font-medium text-red-400">{voucherError}</p>}
+                    {voucherValidation && (
+                      <p className="text-xs font-bold text-emerald-400">
+                        Đã giảm {formatCurrency(voucherValidation.discountAmount)}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex justify-between items-center mb-5 py-4 border-t-2 border-dashed border-[#444]">
                   <span className="text-gray-400 font-bold uppercase tracking-wider text-sm">Tổng cộng</span>
-                  <span className="text-3xl font-black text-[#E50914]">{formatCurrency(calculateTotal())}</span>
+                  <span className="text-3xl font-black text-[#E50914]">{formatCurrency(calculatePayableTotal())}</span>
                 </div>
 
                 {/* CTA Button — thay đổi theo step */}
@@ -576,7 +720,7 @@ export default function BookingPage() {
 
                 {step === 3 && (
                   <button
-                    onClick={handleCheckout}
+                    onClick={() => handleCheckout()}
                     disabled={isSubmitting}
                     className="w-full py-4 rounded-lg flex items-center justify-center font-black text-lg bg-[#E50914] hover:bg-[#F40612] text-white uppercase tracking-wider transition-all shadow-lg hover:shadow-[0_0_15px_rgba(229,9,20,0.6)] active:scale-95 disabled:opacity-50"
                   >
@@ -588,6 +732,17 @@ export default function BookingPage() {
           </div>
         </div>
       </div>
+
+      {/* ── PASSCODE MODAL ──────────────────────────────────────── */}
+      <PasscodeModal
+        isOpen={showPasscode}
+        onClose={() => setShowPasscode(false)}
+        onSuccess={(token) => {
+          setSecurityToken(token);
+          setShowPasscode(false);
+          setTimeout(() => handleCheckout(token), 100);
+        }}
+      />
     </div>
   );
 }

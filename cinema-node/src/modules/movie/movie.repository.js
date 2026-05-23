@@ -9,16 +9,7 @@ import pool from '../../config/database.js';
 // - 'now_showing' : có ít nhất 1 suất chiếu trước 48h tới hoặc chưa kết thúc trong ngày
 // - 'coming_soon' : release_date > CURDATE()
 // - 'stopped'     : không còn suất chiếu nào trong tương lai và đã release
-const STATUS_EXPR = `
-  CASE
-    WHEN m.release_date > CURDATE() THEN 'coming_soon'
-    WHEN EXISTS (
-      SELECT 1 FROM showtimes s
-      WHERE s.movie_id = m.id AND s.end_time >= DATE_ADD(NOW(), INTERVAL 7 HOUR)
-    ) THEN 'now_showing'
-    ELSE 'stopped'
-  END AS computed_status
-`;
+const STATUS_EXPR = `m.status AS computed_status`;
 
 const mapMovie = (r) => ({
   id:          r.id,
@@ -39,28 +30,42 @@ const mapMovie = (r) => ({
 });
 
 // FIX #5: Real SQL pagination — LIMIT/OFFSET + parallel COUNT(*)
-const findAll = async (status = null, page = 1, perPage = 20) => {
+const findAll = async (status = null, page = 1, perPage = 20, branchId = null) => {
   const offset = (page - 1) * perPage;
 
   // Filter theo computed status bằng HAVING (vì là alias)
   let having = '';
   const params = [];
   if (status) { having = ' HAVING computed_status = ?'; params.push(status); }
+  const branchWhere = branchId
+    ? `WHERE EXISTS (
+         SELECT 1
+         FROM showtimes s
+         JOIN rooms r ON r.id = s.room_id
+         WHERE s.movie_id = m.id
+           AND r.branch_id = ?
+           AND s.start_time >= DATE_ADD(NOW(), INTERVAL 7 HOUR)
+       )`
+    : '';
+  const branchParams = branchId ? [branchId] : [];
 
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total FROM (
        SELECT m.id, ${STATUS_EXPR}
-       FROM movies m ${having}
+       FROM movies m
+       ${branchWhere}
+       ${having}
      ) AS sub`,
-    params
+    [...branchParams, ...params]
   );
   const [rows] = await pool.query(
-    `SELECT m.*, ${STATUS_EXPR}
+     `SELECT m.*, ${STATUS_EXPR}
      FROM movies m
+     ${branchWhere}
      ${having}
      ORDER BY m.release_date DESC
      LIMIT ? OFFSET ?`,
-    [...params, perPage, offset]
+    [...branchParams, ...params, perPage, offset]
   );
   return { rows: rows.map(mapMovie), total: Number(total) };
 };
@@ -77,14 +82,17 @@ const findById = async (id) => {
 /**
  * Lấy movie kèm showtimes tương lai
  */
-const findByIdWithShowtimes = async (id) => {
+const findByIdWithShowtimes = async (id, branchId = null) => {
   const movie = await findById(id);
   if (!movie) return null;
+  const branchFilter = branchId ? 'AND r.branch_id = ?' : '';
+  const queryParams = branchId ? [id, branchId] : [id];
 
   const [showtimes] = await pool.query(
     `SELECT s.id, s.movie_id, s.room_id, s.start_time, s.end_time,
             s.price_regular, s.price_vip, s.price_couple, s.format,
             r.id AS r_id, r.name AS r_name, r.type AS r_type, r.total_seats AS r_total_seats,
+            r.branch_id AS r_branch_id, b.name AS branch_name, b.city AS branch_city, b.address AS branch_address,
             (
               SELECT COUNT(*) FROM booking_seats bs
               JOIN bookings b ON bs.booking_id = b.id
@@ -92,9 +100,11 @@ const findByIdWithShowtimes = async (id) => {
             ) AS booked_seats
      FROM showtimes s
      JOIN rooms r ON s.room_id = r.id
+     LEFT JOIN branches b ON b.id = r.branch_id
      WHERE s.movie_id = ? AND s.start_time >= DATE_ADD(NOW(), INTERVAL 7 HOUR)
+       ${branchFilter}
      ORDER BY s.start_time ASC`,
-    [id]
+    queryParams
   );
 
   movie.showtimes = showtimes.map(s => ({
@@ -114,6 +124,8 @@ const findByIdWithShowtimes = async (id) => {
       type:       s.r_type,
       totalSeats: s.r_total_seats,
       total_seats: s.r_total_seats, // Cho Frontend map snake_case
+      branchId:   s.r_branch_id,
+      branch:     s.branch_name ? { id: s.r_branch_id, name: s.branch_name, city: s.branch_city, address: s.branch_address } : null,
     },
   }));
 

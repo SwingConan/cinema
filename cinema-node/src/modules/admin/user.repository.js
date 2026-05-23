@@ -7,6 +7,12 @@ const mapUser = (r) => ({
   email:     r.email,
   phone:     r.phone ?? null,
   role:      r.role,
+  branchId:  r.branch_id ?? null,
+  branch:    r.branch_name ? {
+    id: r.branch_id,
+    name: r.branch_name,
+    city: r.branch_city,
+  } : undefined,
   isActive:  r.is_active === 1 || r.is_active === true,
   createdAt: r.created_at,
 });
@@ -36,8 +42,11 @@ const findAll = async ({ search = '', role = '', page = 1, perPage = 50 } = {}) 
     params
   );
   const [rows] = await pool.query(
-    `SELECT id, name, email, phone, role, is_active, created_at
-     FROM users u ${where}
+    `SELECT u.id, u.name, u.email, u.phone, u.role, u.branch_id, u.is_active, u.created_at,
+            b.name AS branch_name, b.city AS branch_city
+     FROM users u
+     LEFT JOIN branches b ON b.id = u.branch_id
+     ${where}
      ORDER BY created_at DESC
      LIMIT ? OFFSET ?`,
     [...params, perPage, offset]
@@ -49,12 +58,19 @@ const findAll = async ({ search = '', role = '', page = 1, perPage = 50 } = {}) 
 /**
  * Đổi role của user (chỉ 'staff' | 'customer', admin không được đổi)
  */
-const updateRole = async (id, role) => {
+const updateRole = async (id, role, branchId = null) => {
   await pool.query(
-    'UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?',
-    [role, id]
+    'UPDATE users SET role = ?, branch_id = ?, updated_at = NOW() WHERE id = ?',
+    [role, role === 'staff' ? branchId : null, id]
   );
-  const [rows] = await pool.query('SELECT id, name, email, phone, role, is_active, created_at FROM users WHERE id = ? LIMIT 1', [id]);
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.email, u.phone, u.role, u.branch_id, u.is_active, u.created_at,
+            b.name AS branch_name, b.city AS branch_city
+     FROM users u
+     LEFT JOIN branches b ON b.id = u.branch_id
+     WHERE u.id = ? LIMIT 1`,
+    [id]
+  );
   return rows.length ? mapUser(rows[0]) : null;
 };
 
@@ -66,7 +82,14 @@ const toggleActive = async (id) => {
     'UPDATE users SET is_active = IF(is_active = 1, 0, 1), updated_at = NOW() WHERE id = ?',
     [id]
   );
-  const [rows] = await pool.query('SELECT id, name, email, phone, role, is_active, created_at FROM users WHERE id = ? LIMIT 1', [id]);
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.email, u.phone, u.role, u.branch_id, u.is_active, u.created_at,
+            b.name AS branch_name, b.city AS branch_city
+     FROM users u
+     LEFT JOIN branches b ON b.id = u.branch_id
+     WHERE u.id = ? LIMIT 1`,
+    [id]
+  );
   return rows.length ? mapUser(rows[0]) : null;
 };
 

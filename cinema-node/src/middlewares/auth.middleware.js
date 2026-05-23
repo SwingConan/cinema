@@ -22,7 +22,7 @@ export const authenticate = async (req, res, next) => {
 
     // Lấy thông tin user mới nhất từ DB (tránh dùng token của user đã bị xóa)
     const [rows] = await pool.query(
-      'SELECT id, name, email, phone, role FROM users WHERE id = ?',
+      'SELECT id, name, email, phone, role, branch_id FROM users WHERE id = ?',
       [decoded.id]
     );
 

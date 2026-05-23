@@ -24,8 +24,8 @@ const CONFIG = {
   },
 
   // Được tra cứu tự động bằng scripts/check-db.js
-  showtimeId: 2,    // Phim: CẢM ƠN NGƯỜI ĐÃ THỨC CÙNG TÔI
-  seatId:     383,  // Ghế A3 (regular) — A1/A2 đã paid từ test trước
+  showtimeId: null,
+  seatId:     null,
 };
 // ================================================================
 
@@ -179,17 +179,18 @@ async function scenario1_auth() {
     // Thử endpoint public showtime nếu không có admin token
     // Lấy showtime đầu tiên từ public movies
     const moviesRes = await api('GET', '/public/movies');
-    if (!moviesRes.ok || !moviesRes.data?.length) {
+    const movies = Array.isArray(moviesRes.data) ? moviesRes.data : (moviesRes.data?.data || []);
+    if (!moviesRes.ok || !movies.length) {
       fail('Không lấy được danh sách phim. Kiểm tra DB có dữ liệu chưa.');
       return null;
     }
-    info('Phim đầu tiên:', moviesRes.data[0]?.title);
+    info('Phim đầu tiên:', movies[0]?.title);
 
     // Thử lấy showtime ID 1 tới 20 cho đến khi tìm được
     let foundShowtime = null;
     for (let id = 1; id <= 20; id++) {
       const stRes = await api('GET', `/public/showtimes/${id}`);
-      if (stRes.ok && stRes.data?.showtime) {
+      if (stRes.ok && stRes.data?.id) {
         foundShowtime = stRes.data;
         showtimeId    = id;
         break;
@@ -201,10 +202,10 @@ async function scenario1_auth() {
       return null;
     }
 
-    pass(`Tìm được suất chiếu: ID=${showtimeId} (${foundShowtime.showtime?.movie?.title || 'N/A'})`);
+    pass(`Tìm được suất chiếu: ID=${showtimeId} (${foundShowtime.movie?.title || 'N/A'})`);
 
     // Lấy ghế đầu tiên còn available
-    const seats = foundShowtime.showtime?.room?.seats || [];
+    const seats = foundShowtime.room?.seats || [];
     const booked = foundShowtime.bookedSeatIds || foundShowtime.booked_seat_ids || [];
     const locked = foundShowtime.lockedSeatIds || foundShowtime.locked_seat_ids || [];
     const unavailable = new Set([...booked, ...locked]);

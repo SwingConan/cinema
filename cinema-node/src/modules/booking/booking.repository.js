@@ -5,6 +5,7 @@ const mapBooking = (r) => ({
   id:          r.id,
   userId:      r.user_id,
   showtimeId:  r.showtime_id,
+  branchId:    r.branch_id ?? null,
   totalAmount: r.total_amount,
   status:      r.status,
   qrCode:      r.qr_code,
@@ -17,6 +18,7 @@ const findByUser = async (userId) => {
        m.title AS movie_title, m.poster AS movie_poster,
        s.start_time, s.end_time, s.format,
        r.name AS room_name, r.type AS room_type,
+       br.name AS branch_name, br.city AS branch_city,
        GROUP_CONCAT(
          CONCAT(se.\`row\`, se.\`column\`)
          ORDER BY se.\`row\`, se.\`column\`
@@ -26,10 +28,11 @@ const findByUser = async (userId) => {
      JOIN showtimes s ON b.showtime_id = s.id
      JOIN movies m ON s.movie_id = m.id
      JOIN rooms r ON s.room_id = r.id
+     LEFT JOIN branches br ON br.id = b.branch_id
      LEFT JOIN booking_seats bs ON bs.booking_id = b.id
      LEFT JOIN seats se ON se.id = bs.seat_id
      WHERE b.user_id = ?
-     GROUP BY b.id, m.title, m.poster, s.start_time, s.end_time, s.format, r.name, r.type
+     GROUP BY b.id, m.title, m.poster, s.start_time, s.end_time, s.format, r.name, r.type, br.name, br.city
      ORDER BY b.created_at DESC`,
     [userId]
   );
@@ -40,6 +43,7 @@ const findByUser = async (userId) => {
       startTime: r.start_time, endTime: r.end_time, format: r.format,
       movie: { title: r.movie_title, poster: r.movie_poster },
       room:  { name: r.room_name, type: r.room_type },
+      branch: r.branch_name ? { id: r.branch_id, name: r.branch_name, city: r.branch_city } : null,
     },
   }));
 };
@@ -57,10 +61,12 @@ const findByIdWithDetails = async (id) => {
 
   const [showtimeRows] = await pool.query(
     `SELECT s.*, m.title AS movie_title, m.poster AS movie_poster,
-            r.name AS room_name, r.type AS room_type
+            r.name AS room_name, r.type AS room_type,
+            br.name AS branch_name, br.city AS branch_city
      FROM showtimes s JOIN movies m ON s.movie_id = m.id JOIN rooms r ON s.room_id = r.id
+     LEFT JOIN branches br ON br.id = ?
      WHERE s.id = ? LIMIT 1`,
-    [booking.showtimeId]
+    [booking.branchId, booking.showtimeId]
   );
   if (showtimeRows.length) {
     const s = showtimeRows[0];
@@ -68,6 +74,7 @@ const findByIdWithDetails = async (id) => {
       id: s.id, startTime: s.start_time, endTime: s.end_time, format: s.format,
       movie: { id: s.movie_id, title: s.movie_title, poster: s.movie_poster },
       room:  { id: s.room_id, name: s.room_name, type: s.room_type },
+      branch: s.branch_name ? { id: booking.branchId, name: s.branch_name, city: s.branch_city } : null,
     };
   }
 

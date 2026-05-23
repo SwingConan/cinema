@@ -1,5 +1,6 @@
 import { BookingService } from './booking.service.js';
 import { paginateAll } from '../../utils/pagination.js';
+import { AuditService } from '../audit/audit.service.js';
 
 const index = async (req, res) => {
   try {
@@ -18,11 +19,13 @@ const show = async (req, res) => {
 const store = async (req, res) => {
   try {
     const booking = await BookingService.createBooking({
-      userId:     req.user.id,
-      showtimeId: req.body.showtime_id,
-      seatIds:    req.body.seat_ids,
-      concessions: req.body.concessions || [],  // Mảng [{ id, quantity }]
+      userId:      req.user.id,
+      showtimeId:  req.body.showtime_id,
+      seatIds:     req.body.seat_ids,
+      concessions: req.body.concessions || [],
+      voucherCode: req.body.voucher_code || null,
     });
+    AuditService.logAction(req, 'booking.create', { entityType: 'booking', entityId: booking.id, details: { showtimeId: req.body.showtime_id, seats: req.body.seat_ids, total: booking.totalAmount } });
     res.status(201).json(booking);
   } catch (e) { res.status(e.status || 500).json({ message: e.message }); }
 };
@@ -32,12 +35,15 @@ const posStore = async (req, res) => {
   try {
     const booking = await BookingService.createPOSBooking({
       staffId:       req.user.id,
+      staffBranchId: req.user.branch_id ?? null,
+      staffRole:     req.user.role,
       showtimeId:    req.body.showtime_id,
       seatIds:       req.body.seat_ids,
       concessions:   req.body.concessions || [],
       customerEmail: req.body.customer_email || null,
       paymentMethod: req.body.payment_method || 'cash',
     });
+    AuditService.logAction(req, 'booking.pos_create', { entityType: 'booking', entityId: booking.id, details: { showtimeId: req.body.showtime_id, seats: req.body.seat_ids, method: req.body.payment_method } });
     res.status(201).json(booking);
   } catch (e) { res.status(e.status || 500).json({ message: e.message }); }
 };
@@ -50,6 +56,7 @@ const posConfirm = async (req, res) => {
       staffId:       req.user.id,
       customerEmail: req.body.customer_email || null,
     });
+    AuditService.logAction(req, 'booking.pos_confirm', { entityType: 'booking', entityId: parseInt(req.params.id) });
     res.json(result);
   } catch (e) { res.status(e.status || 500).json({ message: e.message }); }
 };
@@ -111,6 +118,7 @@ const cancel = async (req, res) => {
       bookingId: parseInt(req.params.id),
       userId:    req.user.id,
     });
+    AuditService.logAction(req, 'booking.cancel', { entityType: 'booking', entityId: parseInt(req.params.id) });
     res.json(result);
   } catch (e) { res.status(e.status || 500).json({ message: e.message }); }
 };

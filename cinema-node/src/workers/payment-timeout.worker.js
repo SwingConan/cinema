@@ -12,6 +12,7 @@
 // =============================================
 import cron from 'node-cron';
 import pool from '../config/database.js';
+import { AuditRepository } from '../modules/audit/audit.repository.js';
 
 let _io = null;
 
@@ -78,6 +79,17 @@ const cancelExpiredBookings = async () => {
     await conn.commit();
 
     console.log(`[PaymentTimeout] ✅ Đã cancel ${bookingIds.length} đơn hết hạn: [${bookingIds.join(', ')}]`);
+
+    // Ghi audit log cho từng booking bị cancel
+    for (const booking of expiredBookings) {
+      AuditRepository.log({
+        userId: booking.user_id,
+        action: 'booking.auto_cancelled',
+        entityType: 'booking',
+        entityId: booking.id,
+        details: { reason: 'payment_timeout_10min' },
+      }).catch(() => {});
+    }
 
     // 5. Emit Socket.io: Báo cho các client đang xem màn hình chọn ghế
     //    rằng các ghế này đã được nhả ra (real-time)

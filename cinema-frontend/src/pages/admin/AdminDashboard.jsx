@@ -98,10 +98,26 @@ export default function AdminDashboard() {
   const [startDate, setStartDate] = useState(sevenDaysAgo);
   const [endDate,   setEndDate]   = useState(today);
 
+  const [branches, setBranches] = useState([]);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+
+  const fetchBranches = async () => {
+    try {
+      const res = await api.get("/admin/branches");
+      setBranches(res.data?.data ?? res.data);
+    } catch (err) {
+      console.error("Error fetching branches for dashboard", err);
+    }
+  };
+
   const fetchStats = async () => {
     setLoading(true); setError("");
     try {
-      const res = await api.get(`/admin/dashboard/stats?start_date=${startDate}&end_date=${endDate}`);
+      let url = `/admin/dashboard/stats?start_date=${startDate}&end_date=${endDate}`;
+      if (selectedBranchId) {
+        url += `&branch_id=${selectedBranchId}`;
+      }
+      const res = await api.get(url);
       setStats(res.data);
     } catch (err) {
       setError("Không thể tải dữ liệu. Vui lòng thử lại.");
@@ -111,7 +127,13 @@ export default function AdminDashboard() {
     }
   };
 
-  useEffect(() => { fetchStats(); }, []);
+  useEffect(() => {
+    fetchBranches();
+  }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [startDate, endDate, selectedBranchId]);
 
   const handleExport = () => {
     if (!stats?.recent_bookings?.length) { alert("Không có dữ liệu!"); return; }
@@ -160,6 +182,20 @@ export default function AdminDashboard() {
           <p className="text-gray-500 text-sm pl-4 mt-0.5">Phân tích nghiệp vụ rạp phim — Real-time</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 bg-[#1a1a1a] p-2 rounded-xl border border-[#2a2a2a]">
+          {/* Branch Filter */}
+          <select
+            value={selectedBranchId}
+            onChange={e => setSelectedBranchId(e.target.value)}
+            className="bg-[#222] text-sm text-white border border-[#333] rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#E50914] font-medium"
+          >
+            <option value="">Tất cả chi nhánh</option>
+            {branches.map(b => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+
+          <span className="w-px h-6 bg-[#333] mx-1 hidden sm:inline" />
+
           <Calendar className="w-4 h-4 text-gray-500 ml-1"/>
           <input type="date" value={startDate} max={endDate}
             onChange={e => setStartDate(e.target.value)}

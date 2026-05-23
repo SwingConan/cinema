@@ -13,6 +13,7 @@ import app from './app.js';
 import pool from './config/database.js';
 import { setIo, emitSeatStatus } from './modules/seat-lock/seat-lock.service.js';
 import { setWebhookIo } from './modules/webhook/webhook.service.js';
+import { setNotificationIo } from './modules/notification/notification.service.js';
 import { startPaymentTimeoutWorker, setWorkerIo } from './workers/payment-timeout.worker.js';
 import './workers/email.worker.js';  // Khởi động Email Queue Worker (BullMQ lắng nghe Redis)
 
@@ -33,6 +34,7 @@ const io = new Server(httpServer, {
 // Inject io vào các Service cần emit real-time events
 setIo(io);
 setWebhookIo(io);
+setNotificationIo(io);
 setWorkerIo(io);
 
 // Khởi động Background Workers

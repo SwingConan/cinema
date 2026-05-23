@@ -38,6 +38,7 @@ export default function ManageUsers() {
   const [roleFilter, setRoleFilter] = useState("");
   const [page,     setPage]     = useState(1);
   const [toast,    setToast]    = useState(null); // { type: 'success'|'error', msg }
+  const [branches, setBranches] = useState([]);
 
   // Dropdown state: { userId, open }
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -66,13 +67,24 @@ export default function ManageUsers() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
+  useEffect(() => {
+    api.get("/admin/branches")
+      .then((res) => setBranches(Array.isArray(res.data) ? res.data : (res.data?.data ?? [])))
+      .catch((err) => console.error("Branch fetch error:", err));
+  }, []);
+
   // Reset về trang 1 khi filter thay đổi
   useEffect(() => { setPage(1); }, [search, roleFilter]);
 
   const handleChangeRole = async (userId, role) => {
     setOpenDropdown(null);
     try {
-      const res = await api.put(`/admin/users/${userId}/role`, { role });
+      const current = users.find((u) => u.id === userId);
+      const defaultBranch = current?.branchId || current?.branch_id || branches[0]?.id || null;
+      const res = await api.put(`/admin/users/${userId}/role`, {
+        role,
+        ...(role === "staff" && defaultBranch ? { branch_id: defaultBranch } : {}),
+      });
       setUsers(prev => prev.map(u => u.id === userId ? res.data.user : u));
       showToast("success", res.data.message);
     } catch (err) {
@@ -208,6 +220,26 @@ export default function ManageUsers() {
                   {/* Role */}
                   <td className="px-4 py-3">
                     <RoleBadge role={u.role}/>
+                    {u.role === "staff" && (
+                      <select
+                        value={u.branchId || u.branch_id || ""}
+                        onChange={async (e) => {
+                          try {
+                            const res = await api.put(`/admin/users/${u.id}/role`, { role: "staff", branch_id: e.target.value });
+                            setUsers(prev => prev.map(item => item.id === u.id ? res.data.user : item));
+                            showToast("success", "Đã cập nhật chi nhánh nhân viên.");
+                          } catch (err) {
+                            showToast("error", err.response?.data?.message || "Không thể cập nhật chi nhánh.");
+                          }
+                        }}
+                        className="mt-2 block max-w-[180px] rounded-lg border border-[#333] bg-[#111] px-2 py-1 text-xs text-gray-300 outline-none"
+                      >
+                        <option value="">Chọn chi nhánh</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={branch.id}>{branch.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </td>
 
                   {/* Trạng thái */}

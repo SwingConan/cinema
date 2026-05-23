@@ -1,9 +1,9 @@
-// src/modules/booking/booking.routes.js
 import { Router } from 'express';
 import { BookingController } from './booking.controller.js';
 import { authenticate } from '../../middlewares/auth.middleware.js';
 import { authorize } from '../../middlewares/role.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
+import { requirePasscode } from '../../middlewares/passcode.middleware.js';
 
 const router = Router();
 
@@ -14,6 +14,7 @@ router.put('/:id/cancel', authenticate, BookingController.cancel);
 router.get('/:id',  authenticate, BookingController.show);
 router.post('/',
   authenticate,
+  requirePasscode,
   validate({ showtime_id: 'required|integer', seat_ids: 'required|array' }),
   BookingController.store
 );

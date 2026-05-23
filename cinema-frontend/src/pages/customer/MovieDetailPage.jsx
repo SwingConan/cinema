@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "../../utils/api";
 import { useAuth } from "../../contexts/AuthContext";
+import { useBranch } from "../../contexts/BranchContext";
 import {
   Clock,
   Calendar,
@@ -17,10 +18,12 @@ import {
 export default function MovieDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
+  const { selectedBranchId, selectedBranch } = useBranch();
 
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState("");
+  const [expandedBranchIds, setExpandedBranchIds] = useState({});
 
   const [reviews, setReviews] = useState([]);
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: "" });
@@ -44,7 +47,7 @@ export default function MovieDetailPage() {
         if (res.data.showtimes && res.data.showtimes.length > 0) {
           const firstShowtime = res.data.showtimes[0];
           const firstDate = new Date(
-            firstShowtime.startTime ?? firstShowtime.start_time,
+            String(firstShowtime.startTime ?? firstShowtime.start_time).replace("Z", ""),
           ).toLocaleDateString("en-CA");
           setSelectedDate(firstDate);
         }
@@ -128,30 +131,69 @@ export default function MovieDetailPage() {
     }
   };
 
-  if (loading)
-    return (
-      <div className="flex justify-center items-center h-[60vh] text-[#E50914] font-bold">
-        Đang tải thông tin phim...
-      </div>
-    );
-  if (!movie)
-    return (
-      <div className="p-8 text-center text-red-500 font-bold">
-        Không tìm thấy phim.
-      </div>
-    );
 
   const currentShowtimes = showtimesByDate[selectedDate] || [];
 
-  const groupedShowtimes = currentShowtimes.reduce((acc, st) => {
-    const roomType = st.room?.type || "2D";
-    const format = st.format || "Phụ đề";
-    const groupKey = `${roomType} - ${format}`;
+  const showtimesByBranch = useMemo(() => {
+    const branchesMap = {};
+    currentShowtimes.forEach((st) => {
+      const branchObj = st.room?.branch;
+      const branchId = branchObj?.id || 0;
+      const branchName = branchObj?.name || "Chi nhánh khác";
+      const branchCity = branchObj?.city || "Khác";
+      const branchAddress = branchObj?.address || "";
 
-    if (!acc[groupKey]) acc[groupKey] = [];
-    acc[groupKey].push(st);
-    return acc;
-  }, {});
+      if (!branchesMap[branchId]) {
+        branchesMap[branchId] = {
+          id: branchId,
+          name: branchName,
+          city: branchCity,
+          address: branchAddress,
+          showtimes: [],
+        };
+      }
+      branchesMap[branchId].showtimes.push(st);
+    });
+    return Object.values(branchesMap);
+  }, [currentShowtimes]);
+
+  const branchesByCity = useMemo(() => {
+    const cityMap = {};
+    showtimesByBranch.forEach((b) => {
+      const city = b.city || "Khác";
+      if (!cityMap[city]) cityMap[city] = [];
+      cityMap[city].push(b);
+    });
+    return cityMap;
+  }, [showtimesByBranch]);
+
+  useEffect(() => {
+    if (showtimesByBranch.length > 0) {
+      const firstBranchId = showtimesByBranch[0].id;
+      setExpandedBranchIds({
+        [firstBranchId]: true,
+      });
+    }
+  }, [selectedDate, showtimesByBranch]);
+
+  const toggleBranch = (branchId) => {
+    setExpandedBranchIds((prev) => ({
+      ...prev,
+      [branchId]: !prev[branchId],
+    }));
+  };
+
+  const getGroupedShowtimes = (branchShowtimes) => {
+    return branchShowtimes.reduce((acc, st) => {
+      const roomType = st.room?.type || "2D";
+      const format = st.format || "Phụ đề";
+      const groupKey = `${roomType} - ${format}`;
+
+      if (!acc[groupKey]) acc[groupKey] = [];
+      acc[groupKey].push(st);
+      return acc;
+    }, {});
+  };
 
   const totalReviews = reviews.length;
   const avgRating =
@@ -165,6 +207,19 @@ export default function MovieDetailPage() {
     if (filterRating === "ALL") return true;
     return review.rating === filterRating;
   });
+
+  if (loading)
+    return (
+      <div className="flex justify-center items-center h-[60vh] text-[#E50914] font-bold">
+        Đang tải thông tin phim...
+      </div>
+    );
+  if (!movie)
+    return (
+      <div className="p-8 text-center text-red-500 font-bold">
+        Không tìm thấy phim.
+      </div>
+    );
 
   return (
     <div className="bg-[#141414] min-h-[calc(100vh-64px)] pb-12">
@@ -302,50 +357,92 @@ export default function MovieDetailPage() {
 
                 <div className="bg-[#222] rounded-xl p-6 border border-[#333]">
                   <h3 className="text-lg font-semibold mb-4 text-white flex items-center">
-                    <MonitorPlay className="mr-2 text-[#E50914]" /> Các rạp đang
-                    chiếu
+                    <MonitorPlay className="mr-2 text-[#E50914]" />
+                    Lịch chiếu phim
                   </h3>
 
                   <div className="space-y-6">
-                    {Object.keys(groupedShowtimes).map((groupKey) => (
-                      <div
-                        key={groupKey}
-                        className="border-t border-[#444] pt-4 first:border-t-0 first:pt-0"
-                      >
-                        <h4 className="text-sm font-bold text-gray-300 mb-3 border-l-2 border-[#E50914] pl-2 uppercase tracking-wide">
-                          Định dạng:{" "}
-                          <span className="text-white">{groupKey}</span>
-                        </h4>
-                        <div className="flex flex-wrap gap-4">
-                          {groupedShowtimes[groupKey].map((st) => (
-                            <Link
-                              key={st.id}
-                              to={`/booking/${st.id}`}
-                              className="px-5 py-3 bg-[#111] border border-[#444] rounded-lg shadow-sm hover:border-[#E50914] hover:bg-black transition flex flex-col items-center justify-center min-w-[100px] group"
-                            >
-                              <span className="text-lg font-bold text-white group-hover:text-[#E50914]">
-                                {new Date(
-                                  // Hỗ trợ cả camelCase (Node.js) và snake_case
-                                  (st.startTime ?? st.start_time ?? '').replace('Z', ''),
-                                ).toLocaleTimeString("vi-VN", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
-                              <span className="text-xs text-gray-400 mt-1 font-medium">
-                                {st.room?.name}
-                              </span>
-                              <span
-                                className={`text-[10px] mt-0.5 font-bold tracking-wider ${
-                                  st.available_seats < 10
-                                    ? "text-red-500 animate-pulse"
-                                    : "text-green-500/80"
-                                }`}
-                              >
-                                {st.available_seats}/{st.room?.total_seats} ghế
-                              </span>
-                            </Link>
-                          ))}
+                    {Object.keys(branchesByCity).map((city) => (
+                      <div key={city} className="mb-6">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="bg-[#E50914]/10 text-[#E50914] border border-[#E50914]/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center">
+                            📍 {city}
+                          </span>
+                        </div>
+                        <div className="space-y-4">
+                          {branchesByCity[city].map((b) => {
+                            const isExpanded = expandedBranchIds[b.id];
+                            const grouped = getGroupedShowtimes(b.showtimes);
+                            return (
+                              <div key={b.id} className="bg-[#1a1a1a] rounded-xl border border-[#333] overflow-hidden transition-all duration-300">
+                                {/* Branch Header */}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleBranch(b.id)}
+                                  className="w-full flex items-center justify-between p-4 hover:bg-[#222] transition-colors focus:outline-none text-left"
+                                >
+                                  <div>
+                                    <h4 className="text-base font-bold text-white flex items-center gap-2">
+                                      {b.name}
+                                    </h4>
+                                    {b.address && (
+                                      <p className="text-xs text-gray-400 mt-1 font-light">{b.address}</p>
+                                    )}
+                                  </div>
+                                  <span className="text-gray-400">
+                                    {isExpanded ? (
+                                      <span className="text-xs uppercase font-bold text-[#E50914]">Thu gọn ▲</span>
+                                    ) : (
+                                      <span className="text-xs uppercase font-bold text-gray-500">Mở rộng ▼</span>
+                                    )}
+                                  </span>
+                                </button>
+
+                                {/* Branch Content */}
+                                {isExpanded && (
+                                  <div className="p-4 border-t border-[#333] bg-[#111] space-y-4">
+                                    {Object.keys(grouped).map((groupKey) => (
+                                      <div key={groupKey} className="border-b border-[#222] pb-4 last:border-b-0 last:pb-0">
+                                        <h5 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-l-2 border-[#E50914] pl-2">
+                                          {groupKey}
+                                        </h5>
+                                        <div className="flex flex-wrap gap-3">
+                                          {grouped[groupKey].map((st) => (
+                                            <Link
+                                              key={st.id}
+                                              to={`/booking/${st.id}`}
+                                              className="px-4 py-2.5 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-sm hover:border-[#E50914] hover:bg-black transition flex flex-col items-center justify-center min-w-[90px] group"
+                                            >
+                                              <span className="text-base font-bold text-white group-hover:text-[#E50914]">
+                                                {new Date(
+                                                  (st.startTime ?? st.start_time ?? '').replace('Z', ''),
+                                                ).toLocaleTimeString("vi-VN", {
+                                                  hour: "2-digit",
+                                                  minute: "2-digit",
+                                                })}
+                                              </span>
+                                              <span className="text-[10px] text-gray-400 mt-0.5 font-medium">
+                                                {st.room?.name}
+                                              </span>
+                                              <span
+                                                className={`text-[9px] mt-0.5 font-bold tracking-wider ${
+                                                  st.available_seats < 10
+                                                    ? "text-red-500 animate-pulse"
+                                                    : "text-green-500/80"
+                                                }`}
+                                              >
+                                                {st.available_seats}/{st.room?.total_seats} ghế
+                                              </span>
+                                            </Link>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     ))}

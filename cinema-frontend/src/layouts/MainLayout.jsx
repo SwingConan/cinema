@@ -1,10 +1,14 @@
 import { Outlet, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { LogOut, User as UserIcon, ChevronDown, Ticket } from "lucide-react";
+import { LogOut, User as UserIcon, ChevronDown, Ticket, MapPin } from "lucide-react";
 import Footer from "../components/Footer";
+import NotificationBell from "../components/customer/NotificationBell";
+import VoiceBookingAssistant from "../components/customer/VoiceBookingAssistant";
+import { useBranch } from "../contexts/BranchContext";
 
 export default function MainLayout() {
   const { user, logout } = useAuth();
+  const { branches, selectedBranchId, changeBranch, loadingBranches } = useBranch();
 
   return (
     <div className="min-h-screen flex flex-col bg-[#141414] text-[#e5e5e5] font-sans selection:bg-[#E50914] selection:text-white">
@@ -19,6 +23,22 @@ export default function MainLayout() {
                 >
                   CinemaMS
                 </Link>
+              </div>
+
+              <div className="hidden md:flex items-center gap-2 rounded-lg border border-[#333] bg-[#111] px-3 py-2">
+                <MapPin className="h-4 w-4 text-[#E50914]" />
+                <select
+                  value={selectedBranchId || ""}
+                  onChange={(e) => changeBranch(e.target.value)}
+                  disabled={loadingBranches || branches.length === 0}
+                  className="bg-transparent text-gray-200 text-sm font-bold outline-none max-w-[220px]"
+                >
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id} className="bg-[#111] text-white">
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* MENU CHÍNH */}
@@ -68,6 +88,7 @@ export default function MainLayout() {
                   >
                     <Ticket className="h-4 w-4" /> Vé Của Tôi
                   </Link>
+                  <NotificationBell />
                   <Link
                     to="/profile"
                     className="text-sm font-medium text-gray-300 hover:text-white hidden sm:flex items-center transition-colors"
@@ -139,6 +160,7 @@ export default function MainLayout() {
       </main>
 
       <Footer />
+      <VoiceBookingAssistant />
     </div>
   );
 }

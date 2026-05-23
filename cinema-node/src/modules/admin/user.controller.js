@@ -30,12 +30,17 @@ export const UserAdminController = {
       }
 
       const { role } = req.body;
+      const branchId = req.body.branch_id ?? req.body.branchId ?? null;
       const allowed = ['staff', 'customer'];
       if (!allowed.includes(role)) {
         return res.status(422).json({ message: `Role không hợp lệ. Chỉ chấp nhận: ${allowed.join(', ')}.` });
       }
 
-      const updated = await UserAdminRepository.updateRole(targetId, role);
+      if (role === 'staff' && !branchId) {
+        return res.status(422).json({ message: 'Vui long chon chi nhanh cho nhan vien.' });
+      }
+
+      const updated = await UserAdminRepository.updateRole(targetId, role, branchId);
       if (!updated) return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
 
       return res.json({ message: `Đã cập nhật quyền thành [${role}].`, user: updated });

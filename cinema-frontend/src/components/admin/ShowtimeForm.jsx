@@ -155,7 +155,7 @@ export default function ShowtimeForm({
             </option>
             {rooms.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name} (Sức chứa: {r.totalSeats ?? r.total_seats})
+                {r.name} ({r.branch?.name || "Chưa phân bổ"}) (Sức chứa: {r.totalSeats ?? r.total_seats})
               </option>
             ))}
           </select>

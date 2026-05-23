@@ -6,7 +6,8 @@ const index = async (req, res) => {
   try {
     const page    = parseInt(req.query.page)    || 1;
     const perPage = parseInt(req.query.per_page) || 20;
-    const { rows, total } = await MovieService.getAll(req.query.status, page, perPage);
+    const branchId = req.query.branch_id ? parseInt(req.query.branch_id) : null;
+    const { rows, total } = await MovieService.getAll(req.query.status, page, perPage, branchId);
     return res.json(paginate(rows, total, page, perPage));
   } catch (err) {
     return res.status(err.status || 500).json({ message: err.message });
@@ -15,7 +16,8 @@ const index = async (req, res) => {
 
 const show = async (req, res) => {
   try {
-    const movie = await MovieService.getByIdWithShowtimes(req.params.id);
+    const branchId = req.query.branch_id ? parseInt(req.query.branch_id) : null;
+    const movie = await MovieService.getByIdWithShowtimes(req.params.id, branchId);
     return res.json(movie);
   } catch (err) {
     return res.status(err.status || 500).json({ message: err.message });

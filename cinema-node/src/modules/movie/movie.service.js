@@ -6,8 +6,8 @@ import { MovieRepository } from './movie.repository.js';
 import fs from 'fs';
 import path from 'path';
 
-const getAll = async (status, page = 1, perPage = 20) => {
-  return MovieRepository.findAll(status, page, perPage);
+const getAll = async (status, page = 1, perPage = 20, branchId = null) => {
+  return MovieRepository.findAll(status, page, perPage, branchId);
 };
 
 const getById = async (id) => {
@@ -20,8 +20,8 @@ const getById = async (id) => {
   return movie;
 };
 
-const getByIdWithShowtimes = async (id) => {
-  const movie = await MovieRepository.findByIdWithShowtimes(id);
+const getByIdWithShowtimes = async (id, branchId = null) => {
+  const movie = await MovieRepository.findByIdWithShowtimes(id, branchId);
   if (!movie) {
     const err = new Error('Không tìm thấy phim.');
     err.status = 404;

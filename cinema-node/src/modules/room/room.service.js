@@ -9,10 +9,10 @@ const getById = async (id) => {
   return room;
 };
 
-const create = async ({ name, type }) => {
+const create = async ({ name, type, branchId, branch_id }) => {
   const existing = await RoomRepository.findByName(name);
   if (existing) { const e = new Error('Tên phòng chiếu đã tồn tại.'); e.status = 422; throw e; }
-  return RoomRepository.create({ name, type });
+  return RoomRepository.create({ name, type, branchId: branchId ?? branch_id ?? null });
 };
 
 const update = async (id, data) => {
@@ -22,7 +22,10 @@ const update = async (id, data) => {
     const dup = await RoomRepository.findByName(data.name, id);
     if (dup) { const e = new Error('Tên phòng chiếu đã tồn tại.'); e.status = 422; throw e; }
   }
-  return RoomRepository.update(id, data);
+  return RoomRepository.update(id, {
+    ...data,
+    branchId: data.branchId ?? data.branch_id,
+  });
 };
 
 const destroy = async (id) => {

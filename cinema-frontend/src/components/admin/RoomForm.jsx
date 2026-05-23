@@ -7,7 +7,9 @@ export default function RoomForm({ room, onSuccess, onCancel }) {
   const [formData, setFormData] = useState({
     name: "",
     type: "2D",
+    branch_id: "",
   });
+  const [branches, setBranches] = useState([]);
   const [matrix, setMatrix] = useState({ rows: 10, cols: 10 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -17,9 +19,16 @@ export default function RoomForm({ room, onSuccess, onCancel }) {
       setFormData({
         name: room.name || "",
         type: room.type || "2D",
+        branch_id: room.branchId || room.branch_id || "",
       });
     }
   }, [room]);
+
+  useEffect(() => {
+    api.get("/admin/branches")
+      .then((res) => setBranches(Array.isArray(res.data) ? res.data : (res.data?.data ?? [])))
+      .catch((err) => console.error("Branch fetch error:", err));
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -106,6 +115,24 @@ export default function RoomForm({ room, onSuccess, onCancel }) {
             <option value="3D">3D</option>
             <option value="IMAX">IMAX</option>
             <option value="4DX">4DX</option>
+          </select>
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="block text-sm font-bold text-gray-400 mb-2 uppercase tracking-wider">
+            Chi nhánh *
+          </label>
+          <select
+            name="branch_id"
+            required
+            value={formData.branch_id}
+            onChange={handleChange}
+            className="mt-1 block w-full bg-[#222] text-white border border-[#444] rounded-lg shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-[#E50914] focus:border-[#E50914] transition-colors"
+          >
+            <option value="">Chọn chi nhánh</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>{branch.name}</option>
+            ))}
           </select>
         </div>
 

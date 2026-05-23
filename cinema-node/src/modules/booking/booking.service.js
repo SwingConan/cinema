@@ -21,6 +21,9 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../../config/database.js';
 import { BookingRepository } from './booking.repository.js';
 import { ConcessionRepository } from '../concession/concession.repository.js';
+import { PriceRuleRepository } from '../price-rule/price-rule.repository.js';
+import { VoucherRepository } from '../voucher/voucher.repository.js';
+import { VoucherService } from '../voucher/voucher.service.js';
 import { emitSeatStatus } from '../seat-lock/seat-lock.service.js';
 import { emailQueue } from '../../workers/email.worker.js';
 
@@ -44,6 +47,10 @@ const getBookingById = async (id, userId) => {
 // userId = null khi gọi từ POS (staff không cần kiểm tra seat_locks của user)
 const _lockAndPriceSeats = async (conn, { showtimeId, seatIds, userId }) => {
   const showtime = await _getShowtime(conn, showtimeId);
+
+  // Lấy thông tin phòng để xác định roomType cho Dynamic Pricing
+  const [roomRows] = await conn.query('SELECT type FROM rooms WHERE id = ? LIMIT 1', [showtime.room_id]);
+  const roomType = roomRows.length ? roomRows[0].type : '2D';
 
   // Sort tăng dần → ngăn Deadlock chéo
   seatIds.sort((a, b) => a - b);
@@ -95,15 +102,23 @@ const _lockAndPriceSeats = async (conn, { showtimeId, seatIds, userId }) => {
       }
     }
 
-    // Fix #1: Number() bắt buộc — mysql2 trả DECIMAL dưới dạng String
-    const priceMap = {
+    // ── DYNAMIC PRICING: Tính giá dựa trên quy tắc giá ───────────────────
+    const basePriceMap = {
       regular: Number(showtime.price_regular),
       vip:     Number(showtime.price_vip),
       couple:  Number(showtime.price_couple),
     };
-    const price = priceMap[seat.type] || 0;
-    seatAmount += price;
-    seatsToBook.push({ seatId, price });
+    const basePrice = basePriceMap[seat.type] || 0;
+
+    // Tính giá động (áp dụng tất cả matching price_rules)
+    const { finalPrice } = await PriceRuleRepository.calculateDynamicPrice(basePrice, {
+      roomType,
+      startTime: showtime.start_time,
+      seatType:  seat.type,
+    });
+
+    seatAmount += finalPrice;
+    seatsToBook.push({ seatId, price: finalPrice });
   }
 
   return { showtime, seatsToBook, seatAmount };
@@ -147,7 +162,11 @@ const _priceConcessions = async (conn, concessions) => {
 // ── SHARED HELPER: Lấy thông tin showtime ─────────────────────────────────
 const _getShowtime = async (conn, showtimeId) => {
   const [rows] = await conn.query(
-    'SELECT id, room_id, price_regular, price_vip, price_couple FROM showtimes WHERE id = ? LIMIT 1',
+    `SELECT s.id, s.room_id, s.start_time, s.price_regular, s.price_vip, s.price_couple,
+            r.branch_id
+     FROM showtimes s
+     JOIN rooms r ON r.id = s.room_id
+     WHERE s.id = ? LIMIT 1`,
     [showtimeId]
   );
   if (rows.length === 0) {
@@ -201,35 +220,67 @@ const _enqueueEmailTicket = (bookingId, qrCode) => {
 // ═══════════════════════════════════════════════════════════════════════════
 // LUỒNG 1: ONLINE BOOKING (Khách đặt qua web → thanh toán VietQR)
 // ═══════════════════════════════════════════════════════════════════════════
-const createBooking = async ({ userId, showtimeId, seatIds, concessions = [] }) => {
+const createBooking = async ({ userId, showtimeId, seatIds, concessions = [], voucherCode = null }) => {
+  // Validate voucher TRƯỚC transaction (để trả lỗi nhanh, không lock DB)
+  let voucherValidation = null;
+
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // Bước 1: Lock ghế + tính tiền ghế
-    const { seatsToBook, seatAmount } = await _lockAndPriceSeats(conn, {
+    // Bước 1: Lock ghế + tính tiền ghế (Dynamic Pricing)
+    const { showtime, seatsToBook, seatAmount } = await _lockAndPriceSeats(conn, {
       showtimeId, seatIds, userId,
     });
 
     // Bước 2: Validate + tính tiền concessions
     const { concessionsToAttach, concessionAmount } = await _priceConcessions(conn, concessions);
 
-    // Bước 3: Tổng tiền = ghế + bắp nước
-    const totalAmount = seatAmount + concessionAmount;
+    // Bước 3: Tổng tiền trước giảm giá
+    const subtotal = seatAmount + concessionAmount;
 
-    // Bước 4: Tạo booking
-    const bookingId = await BookingRepository.create(conn, { userId, showtimeId, totalAmount });
+    // Bước 4: Áp dụng voucher (nếu có)
+    let discountAmount = 0;
+    let voucherId = null;
+    if (voucherCode) {
+      voucherValidation = await VoucherService.validateVoucher(voucherCode, {
+        userId,
+        orderAmount: subtotal,
+      });
+      discountAmount = voucherValidation.discountAmount;
+      voucherId = voucherValidation.voucher.id;
+    }
 
-    // Bước 5: Gắn ghế
+    const totalAmount = subtotal - discountAmount;
+
+    // Bước 5: Tạo booking (với voucher info)
+    const [insertResult] = await conn.query(
+      `INSERT INTO bookings (user_id, showtime_id, branch_id, total_amount, status, voucher_id, discount_amount, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?, NOW(), NOW())`,
+      [userId, showtimeId, showtime.branch_id ?? null, totalAmount, voucherId, discountAmount]
+    );
+    const bookingId = insertResult.insertId;
+
+    // Bước 6: Gắn ghế
     await BookingRepository.attachSeats(conn, bookingId, seatsToBook);
 
-    // Bước 6: Gắn concessions (nếu có)
+    // Bước 7: Gắn concessions (nếu có)
     await ConcessionRepository.attachToBooking(conn, bookingId, concessionsToAttach);
 
-    // Bước 7: Giải phóng seat_locks
+    // Bước 8: Ghi lại voucher usage (nếu có)
+    if (voucherId) {
+      await VoucherRepository.recordUsage(conn, {
+        voucherId,
+        userId,
+        bookingId,
+        discountAmount,
+      });
+    }
+
+    // Bước 9: Giải phóng seat_locks
     await BookingRepository.releaseUserLocks(conn, showtimeId, userId);
 
-    // Bước 8: Sinh Dynamic VietQR URL
+    // Bước 10: Sinh Dynamic VietQR URL
     const bankBin     = process.env.VIETQR_BANK_BIN       || '970415';
     const bankAccount = process.env.VIETQR_ACCOUNT_NUMBER  || '113366668888';
     const accountName = process.env.VIETQR_ACCOUNT_NAME    || 'CINEMA BOOKING';
@@ -249,6 +300,8 @@ const createBooking = async ({ userId, showtimeId, seatIds, concessions = [] }) 
 
     const result = await BookingRepository.findByIdWithDetails(bookingId);
     result.vietQrUrl = vietQrUrl;
+    result.discountAmount = discountAmount;
+    result.subtotal = subtotal;
     return result;
   } catch (err) {
     await conn.rollback();
@@ -263,7 +316,7 @@ const createBooking = async ({ userId, showtimeId, seatIds, concessions = [] }) 
 //   - cash → paid ngay, sinh QR vé vào rạp
 //   - card → pending, sinh VietQR cho khách quét, chờ staff xác nhận
 // ═══════════════════════════════════════════════════════════════════════════
-const createPOSBooking = async ({ staffId, showtimeId, seatIds, concessions = [], customerEmail = null, paymentMethod = 'cash' }) => {
+const createPOSBooking = async ({ staffId, staffBranchId = null, staffRole = 'staff', showtimeId, seatIds, concessions = [], customerEmail = null, paymentMethod = 'cash' }) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -272,6 +325,17 @@ const createPOSBooking = async ({ staffId, showtimeId, seatIds, concessions = []
     const { seatsToBook, seatAmount } = await _lockAndPriceSeats(conn, {
       showtimeId, seatIds, userId: null,
     });
+
+    const [[showtimeBranch]] = await conn.query(
+      `SELECT r.branch_id
+       FROM showtimes s
+       JOIN rooms r ON r.id = s.room_id
+       WHERE s.id = ? LIMIT 1`,
+      [showtimeId]
+    );
+    if (staffRole === 'staff' && Number(showtimeBranch?.branch_id) !== Number(staffBranchId)) {
+      throw Object.assign(new Error('Nhan vien khong duoc ban ve cho chi nhanh khac.'), { status: 403 });
+    }
 
     // Bước 2: Validate + tính tiền concessions
     const { concessionsToAttach, concessionAmount } = await _priceConcessions(conn, concessions);
@@ -286,9 +350,9 @@ const createPOSBooking = async ({ staffId, showtimeId, seatIds, concessions = []
     //   cash → status = 'paid' ngay
     //   card → status = 'pending' (chờ staff xác nhận đã nhận tiền)
     const [result] = await conn.query(
-      `INSERT INTO bookings (user_id, showtime_id, total_amount, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, NOW(), NOW())`,
-      [staffId, showtimeId, totalAmount, isCash ? 'paid' : 'pending']
+      `INSERT INTO bookings (user_id, showtime_id, branch_id, total_amount, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+      [staffId, showtimeId, showtimeBranch?.branch_id ?? null, totalAmount, isCash ? 'paid' : 'pending']
     );
     const bookingId = result.insertId;
 

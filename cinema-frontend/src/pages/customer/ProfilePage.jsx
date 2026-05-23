@@ -5,9 +5,12 @@ import api from "../../utils/api";
 import {
   User, Key, Save, Ticket, Calendar, MapPin,
   CheckCircle2, XCircle, Clock, QrCode as QrCodeIcon, Film,
-  Armchair, History, AlertCircle, Hourglass,
+  Armchair, History, AlertCircle, Hourglass, Crown,
+  Copy, Tag,
 } from "lucide-react";
 import QRCodeLib from "react-qr-code";
+import MembershipCard from "../../components/customer/MembershipCard";
+import toast from "react-hot-toast";
 
 // Xử lý tương thích Vite CJS module exports
 const QRCode = QRCodeLib.default || QRCodeLib.QRCode || QRCodeLib;
@@ -247,6 +250,55 @@ function EmptySlot({ icon: Icon, msg, sub }) {
   );
 }
 
+function VoucherList({ vouchers, loading, onCopy }) {
+  if (loading) {
+    return <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a] p-5 text-gray-500">Đang tải voucher...</div>;
+  }
+
+  if (!vouchers.length) {
+    return <EmptySlot icon={Tag} msg="Chưa có voucher cá nhân" sub="Voucher đổi điểm sẽ xuất hiện tại đây." />;
+  }
+
+  return (
+    <div className="bg-[#1a1a1a] rounded-2xl border border-[#2a2a2a] overflow-hidden">
+      <div className="px-5 py-4 border-b border-[#2a2a2a] flex items-center justify-between">
+        <h3 className="text-white font-black uppercase tracking-wider flex items-center gap-2">
+          <Tag className="w-5 h-5 text-[#E50914]" /> Voucher của tôi
+        </h3>
+        <span className="text-xs text-gray-500 font-bold">{vouchers.length} mã khả dụng</span>
+      </div>
+      <div className="divide-y divide-[#2a2a2a]">
+        {vouchers.map((voucher) => (
+          <div key={voucher.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-lg font-black text-white tracking-wider">{voucher.code}</span>
+                <button onClick={() => onCopy(voucher.code)} className="p-1.5 rounded-lg bg-[#222] text-gray-400 hover:text-white hover:bg-[#333]" title="Copy">
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-sm text-gray-400 mt-1">{voucher.name}</p>
+              <p className="text-xs text-gray-500 mt-1">Hạn dùng: {fmtDatetime(voucher.validTo)}</p>
+            </div>
+            <div className="text-left sm:text-right">
+              <p className="text-emerald-400 font-black text-lg">-{fmtCurrency(voucher.discountValue)}</p>
+              <span className={`inline-flex mt-1 rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-wider ${
+                voucher.status === "used"
+                  ? "border-blue-800/60 bg-blue-900/30 text-blue-400"
+                  : voucher.status === "expired" || voucher.status === "inactive"
+                    ? "border-gray-700 bg-gray-800/50 text-gray-500"
+                    : "border-emerald-800/60 bg-emerald-900/30 text-emerald-400"
+              }`}>
+                {voucher.status === "used" ? "Đã dùng" : voucher.status === "expired" ? "Hết hạn" : voucher.status === "inactive" ? "Tạm dừng" : "Chưa dùng"}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 function ProfilePageContent() {
   const location = useLocation();
@@ -270,6 +322,26 @@ function ProfilePageContent() {
   // Zoomed Ticket QR
   const [zoomedQR, setZoomedQR] = useState(null);
 
+  // Passcode Security State
+  const [passcodeStatus, setPasscodeStatus] = useState({ passcodeEnabled: false, isLocked: false, lockedUntil: null });
+  const [loadingPasscodeStatus, setLoadingPasscodeStatus] = useState(false);
+  const [myVouchers, setMyVouchers] = useState([]);
+  const [loadingVouchers, setLoadingVouchers] = useState(false);
+
+  // Form states
+  const [setupForm, setSetupForm] = useState({ password: "", passcode: "", confirmPasscode: "" });
+  const [setupLoading, setSetupLoading] = useState(false);
+
+  const [changeForm, setChangeForm] = useState({ oldPasscode: "", newPasscode: "", confirmNewPasscode: "" });
+  const [changeLoading, setChangeLoading] = useState(false);
+
+  const [disableForm, setDisableForm] = useState({ password: "" });
+  const [disableLoading, setDisableLoading] = useState(false);
+
+  const [resetStep, setResetStep] = useState(1); // 1: request, 2: verify
+  const [resetForm, setResetForm] = useState({ otp: "", newPasscode: "", confirmNewPasscode: "" });
+  const [resetLoading, setResetLoading] = useState(false);
+
   useEffect(() => {
     if (user) setFormData({ name: user.name || "", phone: user.phone || "" });
   }, [user]);
@@ -288,6 +360,41 @@ function ProfilePageContent() {
     } finally {
       setLoadingBookings(false);
     }
+  };
+
+  const fetchPasscodeStatus = useCallback(async () => {
+    setLoadingPasscodeStatus(true);
+    try {
+      const res = await api.get("/customer/security/passcode/status");
+      setPasscodeStatus(res.data);
+    } catch (e) {
+      console.error("Lỗi lấy trạng thái passcode:", e);
+    } finally {
+      setLoadingPasscodeStatus(false);
+    }
+  }, []);
+
+  const fetchMyVouchers = useCallback(async () => {
+    setLoadingVouchers(true);
+    try {
+      const res = await api.get("/customer/vouchers/my-vouchers", { params: { include_all: 1 } });
+      setMyVouchers(Array.isArray(res.data) ? res.data : (res.data?.data ?? []));
+    } catch (e) {
+      console.error("Lỗi lấy voucher:", e);
+    } finally {
+      setLoadingVouchers(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "history") fetchBookings();
+    if (activeTab === "security") fetchPasscodeStatus();
+    if (activeTab === "membership") fetchMyVouchers();
+  }, [activeTab, fetchPasscodeStatus, fetchMyVouchers]);
+
+  const copyVoucherCode = async (code) => {
+    await navigator.clipboard.writeText(code);
+    toast.success(`Đã copy mã ${code}`);
   };
 
   const handleUpdateInfo = async (e) => {
@@ -330,6 +437,117 @@ function ProfilePageContent() {
       fetchBookings(); // Làm mới danh sách
     } catch (err) {
       alert(err.response?.data?.message || "Không thể hủy đơn. Vui lòng thử lại.");
+    }
+  };
+
+  // ── Security form handlers ──────────────────────────────────
+  const handleSetupPasscode = async (e) => {
+    e.preventDefault();
+    if (setupForm.passcode !== setupForm.confirmPasscode) {
+      toast.error("Mã bảo mật nhập lại không khớp!");
+      return;
+    }
+    if (!/^\d{6}$/.test(setupForm.passcode)) {
+      toast.error("Mã bảo mật phải là 6 chữ số!");
+      return;
+    }
+    setSetupLoading(true);
+    try {
+      await api.post("/customer/security/passcode/setup", {
+        password: setupForm.password,
+        passcode: setupForm.passcode
+      });
+      toast.success("Thiết lập mã bảo mật thành công!");
+      setSetupForm({ password: "", passcode: "", confirmPasscode: "" });
+      fetchPasscodeStatus();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Có lỗi xảy ra.");
+    } finally {
+      setSetupLoading(false);
+    }
+  };
+
+  const handleChangePasscode = async (e) => {
+    e.preventDefault();
+    if (changeForm.newPasscode !== changeForm.confirmNewPasscode) {
+      toast.error("Mã bảo mật mới nhập lại không khớp!");
+      return;
+    }
+    if (!/^\d{6}$/.test(changeForm.newPasscode)) {
+      toast.error("Mã bảo mật phải là 6 chữ số!");
+      return;
+    }
+    setChangeLoading(true);
+    try {
+      await api.post("/customer/security/passcode/change", {
+        oldPasscode: changeForm.oldPasscode,
+        newPasscode: changeForm.newPasscode
+      });
+      toast.success("Đổi mã bảo mật thành công!");
+      setChangeForm({ oldPasscode: "", newPasscode: "", confirmNewPasscode: "" });
+      fetchPasscodeStatus();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Có lỗi xảy ra.");
+    } finally {
+      setChangeLoading(false);
+    }
+  };
+
+  const handleDisablePasscode = async (e) => {
+    e.preventDefault();
+    if (!confirm("Bạn có chắc chắn muốn tắt mã bảo mật? Giao dịch của bạn sẽ kém an toàn hơn.")) return;
+    setDisableLoading(true);
+    try {
+      await api.post("/customer/security/passcode/disable", {
+        password: disableForm.password
+      });
+      toast.success("Đã tắt mã bảo mật!");
+      setDisableForm({ password: "" });
+      fetchPasscodeStatus();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Có lỗi xảy ra.");
+    } finally {
+      setDisableLoading(false);
+    }
+  };
+
+  const handleRequestResetOtp = async () => {
+    setResetLoading(true);
+    try {
+      await api.post("/customer/security/passcode/reset-request");
+      toast.success("📧 Mã OTP đã gửi đến email của bạn!");
+      setResetStep(2);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Lỗi gửi OTP.");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleConfirmReset = async (e) => {
+    e.preventDefault();
+    if (resetForm.newPasscode !== resetForm.confirmNewPasscode) {
+      toast.error("Mã bảo mật nhập lại không khớp!");
+      return;
+    }
+    if (!/^\d{6}$/.test(resetForm.newPasscode)) {
+      toast.error("Mã bảo mật phải là 6 chữ số!");
+      return;
+    }
+    setResetLoading(true);
+    try {
+      await api.post("/customer/security/passcode/reset-confirm", {
+        otp: resetForm.otp,
+        newPasscode: resetForm.newPasscode
+      });
+      toast.success("Đặt lại mã bảo mật thành công!");
+      setResetForm({ otp: "", newPasscode: "", confirmNewPasscode: "" });
+      setResetStep(1);
+      fetchPasscodeStatus();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Có lỗi xảy ra.");
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -386,6 +604,18 @@ function ProfilePageContent() {
                       {pendingBookings.length}
                     </span>
                   )}
+                </button>
+                <button
+                  onClick={() => setActiveTab("membership")}
+                  className={`w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === "membership" ? "bg-[#E50914] text-white" : "text-gray-400 hover:bg-[#222] hover:text-white"}`}
+                >
+                  <Crown className="w-4 h-4 mr-2.5 flex-shrink-0" /> Thành viên
+                </button>
+                <button
+                  onClick={() => setActiveTab("security")}
+                  className={`w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === "security" ? "bg-[#E50914] text-white" : "text-gray-400 hover:bg-[#222] hover:text-white"}`}
+                >
+                  <Key className="w-4 h-4 mr-2.5 flex-shrink-0" /> Bảo mật thanh toán
                 </button>
               </div>
             </div>
@@ -506,6 +736,224 @@ function ProfilePageContent() {
                         onZoomQR={setZoomedQR}
                       />
                     ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── MEMBERSHIP TAB ─────────────────────────────────── */}
+            {activeTab === "membership" && (
+              <div className="space-y-5">
+                <h2 className="text-xl font-black text-white flex items-center uppercase tracking-wider">
+                  <Crown className="mr-2 text-yellow-500" /> Thành Viên & Tích Điểm
+                </h2>
+                <MembershipCard onRedeemed={fetchMyVouchers} />
+                <VoucherList vouchers={myVouchers} loading={loadingVouchers} onCopy={copyVoucherCode} />
+              </div>
+            )}
+
+            {/* ── SECURITY TAB ─────────────────────────────────────── */}
+            {activeTab === "security" && (
+              <div className="bg-[#1a1a1a] rounded-2xl border border-[#2a2a2a] p-6 md:p-8 space-y-6">
+                <h2 className="text-xl font-black text-white flex items-center uppercase tracking-wider">
+                  <Key className="mr-2 text-[#E50914]" /> Bảo Mật Thanh Toán
+                </h2>
+                
+                {loadingPasscodeStatus ? (
+                  <div className="py-8 text-center">
+                    <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-gray-500 font-medium">Đang tải trạng thái bảo mật...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Status Overview Card */}
+                    <div className="bg-[#111] p-5 rounded-2xl border border-[#2a2a2a] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`w-2.5 h-2.5 rounded-full ${passcodeStatus.passcodeEnabled ? "bg-emerald-500" : "bg-red-500"}`} />
+                          <h4 className="text-white font-bold text-base">
+                            {passcodeStatus.passcodeEnabled ? "Mã bảo mật đang BẬT" : "Mã bảo mật đang TẮT"}
+                          </h4>
+                        </div>
+                        <p className="text-gray-400 text-xs sm:max-w-md">
+                          Mã bảo mật 6 chữ số bảo vệ các giao dịch quan trọng như đặt vé, đổi điểm thưởng, hoàn tiền.
+                        </p>
+                      </div>
+                      
+                      {passcodeStatus.isLocked && (
+                        <div className="bg-red-900/20 text-red-400 border border-red-900/50 px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 self-start sm:self-center">
+                          <AlertCircle className="w-4 h-4" />
+                          <span>Tài khoản bị khóa đến {new Date(passcodeStatus.lockedUntil).toLocaleTimeString()}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SETUP FLOW */}
+                    {!passcodeStatus.passcodeEnabled && (
+                      <form onSubmit={handleSetupPasscode} className="space-y-4 max-w-md bg-black/20 p-5 rounded-2xl border border-[#222]">
+                        <h3 className="text-white font-bold text-sm uppercase tracking-wider border-b border-[#222] pb-2 text-[#E50914]">Kích hoạt mã bảo mật</h3>
+                        
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Mật khẩu tài khoản</label>
+                          <input type="password" required value={setupForm.password}
+                            onChange={(e) => setSetupForm({...setupForm, password: e.target.value})}
+                            placeholder="Nhập mật khẩu hiện tại của bạn"
+                            className="w-full bg-[#111] text-white border border-[#333] rounded-lg px-4 py-2.5 focus:border-[#E50914] outline-none text-sm" />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Mã bảo mật (6 số)</label>
+                            <input type="password" required maxLength={6} pattern="\d{6}" value={setupForm.passcode}
+                              onChange={(e) => setSetupForm({...setupForm, passcode: e.target.value.replace(/\D/g, "")})}
+                              placeholder="123456"
+                              className="w-full bg-[#111] text-white border border-[#333] rounded-lg px-4 py-2.5 focus:border-[#E50914] outline-none text-center font-mono text-lg tracking-widest" />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Nhập lại mã</label>
+                            <input type="password" required maxLength={6} pattern="\d{6}" value={setupForm.confirmPasscode}
+                              onChange={(e) => setSetupForm({...setupForm, confirmPasscode: e.target.value.replace(/\D/g, "")})}
+                              placeholder="123456"
+                              className="w-full bg-[#111] text-white border border-[#333] rounded-lg px-4 py-2.5 focus:border-[#E50914] outline-none text-center font-mono text-lg tracking-widest" />
+                          </div>
+                        </div>
+
+                        <button type="submit" disabled={setupLoading}
+                          className="w-full flex items-center justify-center bg-[#E50914] hover:bg-[#c40812] text-white font-bold py-2.5 rounded-xl transition-all disabled:opacity-50 uppercase tracking-wider text-sm">
+                          {setupLoading ? "Đang xử lý..." : "Bật Mã Bảo Mật"}
+                        </button>
+                      </form>
+                    )}
+
+                    {/* CHANGE & DISABLE FLOW */}
+                    {passcodeStatus.passcodeEnabled && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Change Passcode */}
+                        <form onSubmit={handleChangePasscode} className="space-y-4 bg-black/20 p-5 rounded-2xl border border-[#222]">
+                          <h3 className="text-white font-bold text-sm uppercase tracking-wider border-b border-[#222] pb-2 text-[#E50914]">Đổi mã bảo mật</h3>
+                          
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Mã bảo mật cũ (6 số)</label>
+                            <input type="password" required maxLength={6} pattern="\d{6}" value={changeForm.oldPasscode}
+                              onChange={(e) => setChangeForm({...changeForm, oldPasscode: e.target.value.replace(/\D/g, "")})}
+                              placeholder="******"
+                              className="w-full bg-[#111] text-white border border-[#333] rounded-lg px-4 py-2.5 focus:border-[#E50914] outline-none text-center font-mono text-lg tracking-widest" />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Mã mới (6 số)</label>
+                              <input type="password" required maxLength={6} pattern="\d{6}" value={changeForm.newPasscode}
+                                onChange={(e) => setChangeForm({...changeForm, newPasscode: e.target.value.replace(/\D/g, "")})}
+                                placeholder="******"
+                                className="w-full bg-[#111] text-white border border-[#333] rounded-lg px-4 py-2.5 focus:border-[#E50914] outline-none text-center font-mono text-lg tracking-widest" />
+                            </div>
+                            
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Nhập lại mã mới</label>
+                              <input type="password" required maxLength={6} pattern="\d{6}" value={changeForm.confirmNewPasscode}
+                                onChange={(e) => setChangeForm({...changeForm, confirmNewPasscode: e.target.value.replace(/\D/g, "")})}
+                                placeholder="******"
+                                className="w-full bg-[#111] text-white border border-[#333] rounded-lg px-4 py-2.5 focus:border-[#E50914] outline-none text-center font-mono text-lg tracking-widest" />
+                            </div>
+                          </div>
+
+                          <button type="submit" disabled={changeLoading}
+                            className="w-full flex items-center justify-center bg-[#E50914] hover:bg-[#c40812] text-white font-bold py-2.5 rounded-xl transition-all disabled:opacity-50 uppercase tracking-wider text-sm">
+                            {changeLoading ? "Đang xử lý..." : "Cập Nhật Mã"}
+                          </button>
+                        </form>
+
+                        {/* Disable Passcode */}
+                        <div className="space-y-4 bg-black/20 p-5 rounded-2xl border border-[#222] flex flex-col justify-between">
+                          <div>
+                            <h3 className="text-white font-bold text-sm uppercase tracking-wider border-b border-[#222] pb-2 text-[#E50914] mb-4">Tắt mã bảo mật</h3>
+                            <p className="text-gray-400 text-xs mb-4">
+                              Nếu không muốn xác thực passcode khi mua vé nữa, bạn có thể tắt tính năng này bằng cách xác thực lại mật khẩu tài khoản.
+                            </p>
+                            
+                            <form onSubmit={handleDisablePasscode} className="space-y-4">
+                              <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Mật khẩu tài khoản</label>
+                                <input type="password" required value={disableForm.password}
+                                  onChange={(e) => setDisableForm({...disableForm, password: e.target.value})}
+                                  placeholder="Nhập mật khẩu để tắt"
+                                  className="w-full bg-[#111] text-white border border-[#333] rounded-lg px-4 py-2.5 focus:border-[#E50914] outline-none text-sm" />
+                              </div>
+                              <button type="submit" disabled={disableLoading}
+                                className="w-full flex items-center justify-center bg-[#222] border border-[#333] hover:bg-[#333] text-red-500 font-bold py-2.5 rounded-xl transition-all disabled:opacity-50 uppercase tracking-wider text-sm">
+                                {disableLoading ? "Đang xử lý..." : "Tắt mã bảo mật"}
+                              </button>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* RESET VIA OTP SECTION */}
+                    {passcodeStatus.passcodeEnabled && (
+                      <div className="bg-black/20 p-5 rounded-2xl border border-[#222] max-w-md">
+                        <h3 className="text-white font-bold text-sm uppercase tracking-wider border-b border-[#222] pb-2 text-[#E50914] mb-4">
+                          Quên mã bảo mật?
+                        </h3>
+                        
+                        {resetStep === 1 ? (
+                          <div className="space-y-3">
+                            <p className="text-gray-400 text-xs">
+                              Hệ thống sẽ gửi một mã OTP gồm 6 chữ số đến email đăng ký của bạn để xác thực đặt lại mã bảo mật.
+                            </p>
+                            <button onClick={handleRequestResetOtp} disabled={resetLoading}
+                              className="w-full bg-blue-950/40 hover:bg-blue-900/40 text-blue-400 border border-blue-900/50 font-bold py-2.5 rounded-xl transition-all disabled:opacity-50 uppercase tracking-wider text-xs">
+                              {resetLoading ? "Đang gửi OTP..." : "Gửi mã OTP về Email"}
+                            </button>
+                          </div>
+                        ) : (
+                          <form onSubmit={handleConfirmReset} className="space-y-4">
+                            <p className="text-green-400 text-xs bg-green-950/20 border border-green-900/50 p-2.5 rounded-lg">
+                              Mã OTP đã được gửi! Vui lòng kiểm tra hộp thư email của bạn.
+                            </p>
+                            
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Mã OTP (6 chữ số)</label>
+                              <input type="text" required maxLength={6} pattern="\d{6}" value={resetForm.otp}
+                                onChange={(e) => setResetForm({...resetForm, otp: e.target.value.replace(/\D/g, "")})}
+                                placeholder="123456"
+                                className="w-full bg-[#111] text-white border border-[#333] rounded-lg px-4 py-2.5 focus:border-[#E50914] outline-none text-center font-mono text-lg tracking-widest" />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Mã mới (6 số)</label>
+                                <input type="password" required maxLength={6} pattern="\d{6}" value={resetForm.newPasscode}
+                                  onChange={(e) => setResetForm({...resetForm, newPasscode: e.target.value.replace(/\D/g, "")})}
+                                  placeholder="******"
+                                  className="w-full bg-[#111] text-white border border-[#333] rounded-lg px-4 py-2.5 focus:border-[#E50914] outline-none text-center font-mono text-lg tracking-widest" />
+                              </div>
+                              
+                              <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider">Nhập lại mã mới</label>
+                                <input type="password" required maxLength={6} pattern="\d{6}" value={resetForm.confirmNewPasscode}
+                                  onChange={(e) => setResetForm({...resetForm, confirmNewPasscode: e.target.value.replace(/\D/g, "")})}
+                                  placeholder="******"
+                                  className="w-full bg-[#111] text-white border border-[#333] rounded-lg px-4 py-2.5 focus:border-[#E50914] outline-none text-center font-mono text-lg tracking-widest" />
+                              </div>
+                            </div>
+
+                            <div className="flex gap-3">
+                              <button type="button" onClick={() => setResetStep(1)}
+                                className="flex-1 bg-[#333] hover:bg-[#444] text-white font-bold py-2.5 rounded-xl transition-all uppercase tracking-wider text-xs">
+                                Hủy
+                              </button>
+                              <button type="submit" disabled={resetLoading}
+                                className="flex-[2] bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl transition-all disabled:opacity-50 uppercase tracking-wider text-xs">
+                                {resetLoading ? "Đang xác thực..." : "Xác nhận & Đặt mã"}
+                              </button>
+                            </div>
+                          </form>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

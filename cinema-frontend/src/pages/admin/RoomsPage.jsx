@@ -164,6 +164,9 @@ export default function RoomsPage() {
                     Tên Phòng
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">
+                    Chi Nhánh
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">
                     Loại Màn Hình
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-widest">
@@ -193,6 +196,9 @@ export default function RoomsPage() {
                         <div className="text-sm font-bold text-white">
                           {room.name}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {room.branch?.name || "Chưa phân bổ"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span

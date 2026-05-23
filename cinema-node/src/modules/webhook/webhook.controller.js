@@ -102,4 +102,78 @@ const testWebhook = async (req, res) => {
   }
 };
 
-export const WebhookController = { handlePaymentIPN, mockBankIPN, testWebhook };
+/**
+ * POST /api/webhooks/sepay
+ * Webhook thật từ SePay — tự động xác nhận thanh toán.
+ *
+ * SePay Payload:
+ *   { id, gateway, transactionDate, accountNumber, subAccount,
+ *     code, content, transferType, description, transferAmount,
+ *     accumulated, referenceCode }
+ *
+ * Xác thực: Header Authorization = "Apikey <SEPAY_API_KEY>"
+ * Response: HTTP 200 + { success: true }
+ */
+const handleSepayWebhook = async (req, res) => {
+  try {
+    // ── AUTH: Verify SePay API Key ──────────────────────────────────
+    const SEPAY_API_KEY = process.env.SEPAY_API_KEY;
+    if (SEPAY_API_KEY) {
+      const authHeader = req.headers['authorization'] || '';
+      // SePay gửi: "Apikey <key>"
+      const providedKey = authHeader.replace(/^Apikey\s+/i, '').trim();
+      if (providedKey !== SEPAY_API_KEY) {
+        console.warn('[SePay] ❌ API Key không hợp lệ:', authHeader);
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+    }
+
+    const {
+      id: sepayTxnId,
+      gateway,
+      transferAmount,
+      content,
+      transferType,
+      referenceCode,
+      description: sepayDescription,
+      transactionDate,
+    } = req.body;
+
+    console.log('[SePay] 📨 Nhận webhook:', {
+      sepayTxnId, gateway, transferAmount, content,
+      transferType, referenceCode, transactionDate,
+    });
+
+    // ── Chỉ xử lý giao dịch NHẬN tiền (in) ────────────────────────
+    if (transferType === 'out') {
+      console.log('[SePay] ⏭️ Bỏ qua giao dịch chuyển tiền đi (out)');
+      return res.status(200).json({ success: true });
+    }
+
+    // ── Map SePay fields → Internal format ──────────────────────────
+    // SePay gửi nội dung CK trong `content`
+    // Hệ thống tạo QR với nội dung: "CINEMA BOOKING {bookingId}"
+    const internalPayload = {
+      amount:        Number(transferAmount) || 0,
+      description:   content || sepayDescription || '',
+      transactionId: referenceCode || `SEPAY_${sepayTxnId}`,
+      bankCode:      gateway || 'SEPAY',
+    };
+
+    console.log('[SePay] 🔄 Map sang internal format:', internalPayload);
+
+    const result = await WebhookService.handleBankIPN(internalPayload);
+
+    console.log('[SePay] ✅ Kết quả xử lý:', result);
+
+    // SePay yêu cầu trả HTTP 200 + { success: true } để acknowledge
+    return res.status(200).json({ success: true });
+
+  } catch (err) {
+    console.error('[SePay] ❌ Lỗi xử lý webhook:', err.message);
+    // Vẫn trả 200 để SePay không retry vô tận
+    return res.status(200).json({ success: true });
+  }
+};
+
+export const WebhookController = { handlePaymentIPN, mockBankIPN, testWebhook, handleSepayWebhook };

@@ -8,12 +8,14 @@ export default function ShowtimesPage() {
   const [showtimes, setShowtimes] = useState([]);
   const [movies, setMovies] = useState([]);
   const [rooms, setRooms] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingShowtime, setEditingShowtime] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [filterMovie, setFilterMovie] = useState("");
   const [filterRoom, setFilterRoom] = useState("ALL");
+  const [filterBranch, setFilterBranch] = useState("ALL");
   const [filterDate, setFilterDate] = useState("");
   const [viewingShowtime, setViewingShowtime] = useState(null);
 
@@ -24,14 +26,16 @@ export default function ShowtimesPage() {
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [showtimesRes, moviesRes, roomsRes] = await Promise.all([
+      const [showtimesRes, moviesRes, roomsRes, branchesRes] = await Promise.all([
         api.get("/admin/showtimes"),
         api.get("/admin/movies"),
         api.get("/admin/rooms"),
+        api.get("/admin/branches"),
       ]);
       setShowtimes(showtimesRes.data?.data ?? showtimesRes.data);
       setMovies(moviesRes.data?.data ?? moviesRes.data);
       setRooms(roomsRes.data?.data ?? roomsRes.data);
+      setBranches(branchesRes.data?.data ?? branchesRes.data);
     } catch (error) {
       console.error("Error fetching showtimes initial data", error);
     } finally {
@@ -116,7 +120,7 @@ export default function ShowtimesPage() {
       </div>
 
       {!showForm && (
-        <div className="bg-[#1a1a1a] p-6 rounded-xl shadow-2xl border border-[#333] mb-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-[#1a1a1a] p-6 rounded-xl shadow-2xl border border-[#333] mb-8 grid grid-cols-1 md:grid-cols-4 gap-6">
           <div>
             <label className="block text-sm font-bold text-gray-400 mb-2 uppercase tracking-wider">
               Tra cứu tên phim
@@ -131,6 +135,23 @@ export default function ShowtimesPage() {
           </div>
           <div>
             <label className="block text-sm font-bold text-gray-400 mb-2 uppercase tracking-wider">
+              Chi nhánh
+            </label>
+            <select
+              value={filterBranch}
+              onChange={(e) => setFilterBranch(e.target.value)}
+              className="block w-full bg-[#222] text-white border border-[#444] rounded-lg shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-[#E50914] focus:border-[#E50914] transition-colors"
+            >
+              <option value="ALL">Tất cả chi nhánh</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-gray-400 mb-2 uppercase tracking-wider">
               Phòng chiếu
             </label>
             <select
@@ -141,7 +162,7 @@ export default function ShowtimesPage() {
               <option value="ALL">Tất cả phòng</option>
               {rooms.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.name}
+                  {r.name} ({r.branch?.name || "Chưa phân bổ"})
                 </option>
               ))}
             </select>
@@ -210,11 +231,14 @@ export default function ShowtimesPage() {
                     const matchRoom =
                       filterRoom === "ALL" ||
                       (s.roomId ?? s.room_id ?? '').toString() === filterRoom;
+                    const matchBranch =
+                      filterBranch === "ALL" ||
+                      (s.room?.branchId ?? s.room?.branch_id ?? '').toString() === filterBranch;
                     // Hỗ trợ cả camelCase (Node.js) và snake_case
                     const startTime = s.startTime ?? s.start_time ?? '';
                     const matchDate =
                       !filterDate || startTime.toString().startsWith(filterDate);
-                    return matchMovie && matchRoom && matchDate;
+                    return matchMovie && matchRoom && matchBranch && matchDate;
                   })
                   .map((showtime) => (
                     <tr

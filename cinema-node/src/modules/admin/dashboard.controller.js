@@ -9,6 +9,7 @@ export const DashboardController = {
 
       const startDate = req.query.start_date || sevenDaysAgo;
       const endDate   = req.query.end_date   || today;
+      const branchId  = req.query.branch_id ? parseInt(req.query.branch_id, 10) : null;
 
       // Tất cả 9 query chạy song song
       const [
@@ -22,15 +23,15 @@ export const DashboardController = {
         stackedChart,
         recentBookings,
       ] = await Promise.all([
-        DashboardRepository.getOverview(startDate, endDate),
-        DashboardRepository.getOccupancyRate(),
-        DashboardRepository.getRevenueSplit(),
-        DashboardRepository.getShowtimeHeatmap(startDate, endDate),
-        DashboardRepository.getLiveStatus(),
-        DashboardRepository.getTopMovies(startDate, endDate),
-        DashboardRepository.getLowOccupancyAlerts(),
-        DashboardRepository.getStackedRevenueChart(startDate, endDate),
-        DashboardRepository.getRecentBookings(startDate, endDate),
+        DashboardRepository.getOverview(startDate, endDate, branchId),
+        DashboardRepository.getOccupancyRate(branchId),
+        DashboardRepository.getRevenueSplit(branchId),
+        DashboardRepository.getShowtimeHeatmap(startDate, endDate, branchId),
+        DashboardRepository.getLiveStatus(branchId),
+        DashboardRepository.getTopMovies(startDate, endDate, branchId),
+        DashboardRepository.getLowOccupancyAlerts(branchId),
+        DashboardRepository.getStackedRevenueChart(startDate, endDate, branchId),
+        DashboardRepository.getRecentBookings(startDate, endDate, branchId),
       ]);
 
       // Growth % — safe division: last=0 → 100% nếu curr>0, ngược lại 0%

@@ -81,11 +81,11 @@ export default function HeroSlider({ movies }) {
                     </span>
                   )}
 
-                  <h1 className="text-3xl md:text-5xl lg:text-6xl font-black drop-shadow-lg tracking-wide uppercase leading-tight">
+                  <h1 className="text-2xl md:text-4xl lg:text-5xl font-black drop-shadow-lg tracking-wide uppercase leading-tight line-clamp-2">
                     {movie.title}
                   </h1>
 
-                  <p className="text-gray-300 leading-relaxed text-sm md:text-base font-light line-clamp-3 md:line-clamp-4 max-w-3xl whitespace-pre-line">
+                  <p className="text-gray-300 leading-relaxed text-sm md:text-base font-light line-clamp-2 md:line-clamp-3 max-w-3xl whitespace-pre-line">
                     {movie.description ||
                       "Chưa có nội dung chi tiết cho bộ phim này."}
                   </p>

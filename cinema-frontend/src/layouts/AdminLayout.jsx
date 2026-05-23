@@ -8,16 +8,26 @@ import {
   Ticket,
   BarChart3,
   ShoppingBag,
+  DollarSign,
+  Tag,
+  Crown,
+  FileText,
+  Building2,
 } from "lucide-react";
 
 export default function AdminLayout() {
   const navItems = [
     { path: "/admin", end: true, name: "Tổng quan", icon: BarChart3 },
+    { path: "/admin/branches", name: "Chi nhánh", icon: Building2 },
     { path: "/admin/movies", name: "Phim", icon: Film },
     { path: "/admin/rooms", name: "Phòng chiếu", icon: MonitorPlay },
     { path: "/admin/showtimes", name: "Suất chiếu", icon: Ticket },
     { path: "/admin/concessions", name: "F&B (Bắp nước)", icon: ShoppingBag },
+    { path: "/admin/price-rules", name: "Giá linh hoạt", icon: DollarSign },
+    { path: "/admin/vouchers", name: "Voucher", icon: Tag },
+    { path: "/admin/loyalty-tiers", name: "Hạng thành viên", icon: Crown },
     { path: "/admin/users", name: "Tài khoản", icon: Users },
+    { path: "/admin/audit-logs", name: "Nhật ký hệ thống", icon: FileText },
   ];
 
   return (

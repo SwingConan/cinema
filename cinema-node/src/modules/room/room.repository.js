@@ -5,6 +5,12 @@ const mapRoom = (r) => ({
   id:         r.id,
   name:       r.name,
   type:       r.type,
+  branchId:   r.branch_id ?? null,
+  branch:     r.branch_name ? {
+    id: r.branch_id,
+    name: r.branch_name,
+    city: r.branch_city,
+  } : undefined,
   totalSeats: r.total_seats,
   seatsCount: r.seats_count ?? undefined,
   createdAt:  r.created_at,
@@ -13,16 +19,24 @@ const mapRoom = (r) => ({
 
 const findAll = async () => {
   const [rows] = await pool.query(
-    `SELECT r.*, COUNT(s.id) AS seats_count
+    `SELECT r.*, COUNT(s.id) AS seats_count,
+       b.name AS branch_name, b.city AS branch_city
      FROM rooms r
+     LEFT JOIN branches b ON b.id = r.branch_id
      LEFT JOIN seats s ON r.id = s.room_id
-     GROUP BY r.id`
+     GROUP BY r.id, b.name, b.city`
   );
   return rows.map(mapRoom);
 };
 
 const findById = async (id) => {
-  const [rows] = await pool.query('SELECT * FROM rooms WHERE id = ? LIMIT 1', [id]);
+  const [rows] = await pool.query(
+    `SELECT r.*, b.name AS branch_name, b.city AS branch_city
+     FROM rooms r
+     LEFT JOIN branches b ON b.id = r.branch_id
+     WHERE r.id = ? LIMIT 1`,
+    [id]
+  );
   if (rows.length === 0) return null;
   return mapRoom(rows[0]);
 };
@@ -46,16 +60,20 @@ const findByName = async (name, excludeId = null) => {
   return rows.length > 0 ? rows[0] : null;
 };
 
-const create = async ({ name, type }) => {
-  const [result] = await pool.query('INSERT INTO rooms (name, type) VALUES (?, ?)', [name, type]);
+const create = async ({ name, type, branchId = null }) => {
+  const [result] = await pool.query(
+    'INSERT INTO rooms (name, type, branch_id) VALUES (?, ?, ?)',
+    [name, type, branchId]
+  );
   return findById(result.insertId);
 };
 
-const update = async (id, { name, type }) => {
+const update = async (id, { name, type, branchId }) => {
   const sets = [];
   const params = [];
   if (name !== undefined) { sets.push('name = ?'); params.push(name); }
   if (type !== undefined) { sets.push('type = ?'); params.push(type); }
+  if (branchId !== undefined) { sets.push('branch_id = ?'); params.push(branchId); }
   if (sets.length === 0) return findById(id);
   params.push(id);
   await pool.query(`UPDATE rooms SET ${sets.join(', ')} WHERE id = ?`, params);

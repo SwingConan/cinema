@@ -3,15 +3,19 @@ import api from "../../utils/api";
 import MovieCard from "../../components/customer/MovieCard";
 // IMPORT THUỐC MỚI VÀO ĐÂY
 import HeroSlider from "../../components/customer/HeroSlider";
+import { useBranch } from "../../contexts/BranchContext";
 
 export default function HomePage() {
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { selectedBranchId } = useBranch();
 
   useEffect(() => {
     const fetchMovies = async () => {
       try {
-        const res = await api.get("/public/movies");
+        const res = await api.get("/public/movies", {
+          params: selectedBranchId ? { branch_id: selectedBranchId } : {},
+        });
         setMovies(res.data?.data ?? res.data);
       } catch (error) {
         console.error("Error fetching movies", error);
@@ -21,7 +25,7 @@ export default function HomePage() {
     };
 
     fetchMovies();
-  }, []);
+  }, [selectedBranchId]);
 
   if (loading)
     return (

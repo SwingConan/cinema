@@ -7,6 +7,8 @@
 // =============================================
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -30,19 +32,76 @@ import webhookRoutes    from './modules/webhook/webhook.routes.js';
 import concessionRoutes from './modules/concession/concession.routes.js';
 import dashboardRoutes  from './modules/admin/dashboard.routes.js';
 import userAdminRoutes  from './modules/admin/user.routes.js';
+import priceRuleRoutes  from './modules/price-rule/price-rule.routes.js';
+import voucherRoutes    from './modules/voucher/voucher.routes.js';
+import loyaltyRoutes    from './modules/loyalty/loyalty.routes.js';
+import notificationRoutes from './modules/notification/notification.routes.js';
+import voiceBookingRoutes from './modules/voice-booking/voice-booking.routes.js';
+import securityRoutes    from './modules/security/security.routes.js';
+import auditRoutes       from './modules/audit/audit.routes.js';
+import branchRoutes      from './modules/branch/branch.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 const app = express();
 
+// ── SECURITY MIDDLEWARE ───────────────────────────────────────────
+// Helmet: bảo vệ HTTP headers (XSS, clickjacking, MIME sniffing, ...)
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+
+// Rate Limiting: Chống brute-force cho auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 phút
+  max: 100,                   // Tối đa 100 request/IP để dev thoải mái test
+  message: { message: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 15 phút.' },
+  standardHeaders: true,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  message: { message: 'Quá nhiều yêu cầu. Vui lòng thử lại sau.' },
+  standardHeaders: true,
+});
+
+// Rate Limiting: Chống spam AI Voice/Chat (bảo vệ hạn mức Gemini API)
+const voiceLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,   // 1 phút
+  max: 10,                    // Tối đa 10 câu chat/phút/user
+  message: { message: 'Bạn chat quá nhanh. Vui lòng đợi 1 phút.' },
+  standardHeaders: true,
+  keyGenerator: (req) => `voice_${req.user?.id || req.ip}`,
+});
+
+// Rate Limiting: Chống spam đặt vé
+const bookingLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 5,
+  message: { message: 'Tối đa 5 lần đặt vé mỗi phút.' },
+  standardHeaders: true,
+});
+
 // ── GLOBAL MIDDLEWARE ──────────────────────────────────────────────
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost',
+  'http://localhost:5174',
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5174',
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/api/', apiLimiter);
 
 // Static files: poster images
 app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
@@ -61,11 +120,14 @@ app.get('/health', (req, res) => {
 // ── API ROUTES ────────────────────────────────────────────────────
 const API = '/api';
 
-// Auth
-app.use(`${API}/auth`, authRoutes);
+// Auth (rate limited: chống brute-force)
+app.use(`${API}/auth`, authLimiter, authRoutes);
 
 // Movie routes (public + admin đều nằm trong movie.routes.js)
 app.use(API, movieRoutes);
+
+// Dynamic Pricing Engine (PHẢI mount TRƯỚC showtimeRoutes vì /public/showtimes/:id sẽ catch-all)
+app.use(API, priceRuleRoutes);
 
 // Admin resource routes
 app.use(`${API}/admin/rooms`,      roomRoutes);
@@ -74,6 +136,7 @@ app.use(API,                       showtimeRoutes);
 app.use(`${API}/admin/statistics`, statisticRoutes);
 app.use(`${API}/admin/dashboard`,  dashboardRoutes);
 app.use(`${API}/admin/users`,      userAdminRoutes);
+app.use(`${API}/admin/audit`,      auditRoutes);
 
 // Public showtime (đã được định nghĩa trong showtime.routes.js)
 
@@ -98,6 +161,25 @@ app.use(`${API}/staff/pos`, bookingRoutes);
 
 // Concessions (public list + admin CRUD)
 app.use(API, concessionRoutes);
+
+// Branches (public list + admin CRUD)
+app.use(API, branchRoutes);
+
+// Voucher Engine (customer validate + admin CRUD)
+app.use(API, voucherRoutes);
+
+// Loyalty / Membership (customer dashboard + admin tier config)
+app.use(API, loyaltyRoutes);
+
+// Notification Center (customer bell + realtime)
+app.use(API, notificationRoutes);
+
+// Voice Booking (Gemini AI) — rate limited
+app.use(`${API}/customer/voice-booking`, voiceLimiter);
+app.use(API, voiceBookingRoutes);
+
+// Security / Passcode (customer)
+app.use(`${API}/customer/security`, securityRoutes);
 
 // ── WEBHOOK (Không có auth — ngân hàng gọi trực tiếp) ────────────
 // ⚠️ Mount TRƯỚC 404 handler

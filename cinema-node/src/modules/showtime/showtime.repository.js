@@ -13,12 +13,15 @@ const mapShowtime = (r) => ({
   format:       r.format,
   createdAt:    r.created_at,
   bookedSeats:  r.booked_seats ?? 0,  // số ghế đã bán
+  branchId:     r.branch_id ?? null,
   movie: r.movie_title ? {
     id: r.movie_id, title: r.movie_title, duration: r.movie_duration,
     poster: r.movie_poster, rated: r.movie_rated, trailerUrl: r.movie_trailer_url,
   } : undefined,
   room: r.room_name ? {
     id: r.room_id, name: r.room_name, type: r.room_type, totalSeats: r.room_total_seats,
+    branchId: r.branch_id ?? null,
+    branch: r.branch_name ? { id: r.branch_id, name: r.branch_name, city: r.branch_city } : null,
   } : undefined,
 });
 
@@ -27,6 +30,7 @@ const BASE_SELECT = `
     m.title AS movie_title, m.duration AS movie_duration,
     m.poster AS movie_poster, m.rated AS movie_rated, m.trailer_url AS movie_trailer_url,
     r.name AS room_name, r.type AS room_type, r.total_seats AS room_total_seats,
+    r.branch_id, br.name AS branch_name, br.city AS branch_city,
     (
       SELECT COUNT(*) FROM booking_seats bs
       JOIN bookings b ON bs.booking_id = b.id
@@ -35,19 +39,28 @@ const BASE_SELECT = `
   FROM showtimes s
   JOIN movies m ON s.movie_id = m.id
   JOIN rooms r ON s.room_id = r.id
+  LEFT JOIN branches br ON br.id = r.branch_id
 `;
 
 // FIX #4 + #5: Real SQL pagination + safe type casting
-const findAll = async (page = 1, perPage = 20) => {
+const findAll = async (page = 1, perPage = 20, branchId = null) => {
   // Fix #4: Ép kiểu an toàn — query string có thể gửi lên dạng String
   const pageNum    = Number(page)    || 1;
   const perPageNum = Number(perPage) || 20;
   const offset     = (pageNum - 1) * perPageNum;
 
-  const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM showtimes');
+  const branchWhere = branchId ? 'WHERE r.branch_id = ?' : '';
+  const branchParams = branchId ? [branchId] : [];
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM showtimes s
+     JOIN rooms r ON s.room_id = r.id
+     ${branchWhere}`,
+    branchParams
+  );
   const [rows] = await pool.query(
-    BASE_SELECT + ' ORDER BY s.start_time DESC LIMIT ? OFFSET ?',
-    [perPageNum, offset]
+    BASE_SELECT + ` ${branchWhere} ORDER BY s.start_time DESC LIMIT ? OFFSET ?`,
+    [...branchParams, perPageNum, offset]
   );
   return { rows: rows.map(mapShowtime), total: Number(total) };
 };
@@ -195,12 +208,15 @@ const bulkInsert = async (rows) => {
  * Lấy danh sách suất chiếu từ bây giờ trở đi (cho Staff POS)
  * Giới hạn 100 suất gần nhất, join movie + room
  */
-const findUpcoming = async () => {
+const findUpcoming = async (branchId = null) => {
+  const branchFilter = branchId ? ' AND r.branch_id = ?' : '';
   const [rows] = await pool.query(
     BASE_SELECT +
     ` WHERE s.end_time >= DATE_ADD(NOW(), INTERVAL 7 HOUR)
+      ${branchFilter}
       ORDER BY s.start_time ASC
-      LIMIT 2000`
+      LIMIT 2000`,
+    branchId ? [branchId] : []
   );
   return rows.map(mapShowtime);
 };
@@ -210,5 +226,3 @@ export const ShowtimeRepository = {
   hasOverlap, findExistingInRange, bulkInsert,
   create, update, destroy, hasActiveBookings,
 };
-
-

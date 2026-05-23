@@ -1,12 +1,38 @@
 // src/modules/showtime/showtime.service.js
 import { ShowtimeRepository } from './showtime.repository.js';
 import { MovieRepository } from '../movie/movie.repository.js';
+import { PriceRuleRepository } from '../price-rule/price-rule.repository.js';
 
-const getAll = async (page = 1, perPage = 20) => ShowtimeRepository.findAll(page, perPage);
+const getAll = async (page = 1, perPage = 20, branchId = null) => ShowtimeRepository.findAll(page, perPage, branchId);
 
 const getById = async (id) => {
   const s = await ShowtimeRepository.findByIdWithSeatStatus(id);
   if (!s) { const e = new Error('Không tìm thấy suất chiếu.'); e.status = 404; throw e; }
+
+  // ── Dynamic Pricing: tính giá thực tế cho từng loại ghế ──────────────
+  const roomType = s.room?.type || '2D';
+  const [regPrice, vipPrice, copPrice] = await Promise.all([
+    PriceRuleRepository.calculateDynamicPrice(Number(s.priceRegular), { roomType, startTime: s.startTime, seatType: 'regular' }),
+    PriceRuleRepository.calculateDynamicPrice(Number(s.priceVip),     { roomType, startTime: s.startTime, seatType: 'vip' }),
+    PriceRuleRepository.calculateDynamicPrice(Number(s.priceCouple),  { roomType, startTime: s.startTime, seatType: 'couple' }),
+  ]);
+
+  s.priceRegular = regPrice.finalPrice;
+  s.priceVip     = vipPrice.finalPrice;
+  s.priceCouple  = copPrice.finalPrice;
+
+  // Thu thập danh sách các quy tắc đã áp dụng (loại bỏ trùng lặp theo tên)
+  const rulesMap = new Map();
+  const allApplied = [
+    ...(regPrice.appliedRules || []),
+    ...(vipPrice.appliedRules || []),
+    ...(copPrice.appliedRules || [])
+  ];
+  allApplied.forEach(r => {
+    if (r.name) rulesMap.set(r.name, r);
+  });
+  s.appliedRules = Array.from(rulesMap.values());
+
   return s;
 };
 
@@ -237,7 +263,6 @@ const bulkGenerate = async (data) => {
   };
 };
 
-const getStaffShowtimes = async () => ShowtimeRepository.findUpcoming();
+const getStaffShowtimes = async (branchId = null) => ShowtimeRepository.findUpcoming(branchId);
 
 export const ShowtimeService = { getAll, getById, getStaffShowtimes, create, update, destroy, bulkGenerate };
-

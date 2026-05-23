@@ -5,6 +5,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
+import { BranchProvider } from "./contexts/BranchContext";
 import { ROLE_ADMIN, ROLE_STAFF, ROLE_CUSTOMER } from "./utils/constants";
 import { Toaster } from "react-hot-toast";
 
@@ -21,6 +22,11 @@ import RoomsPage from "./pages/admin/RoomsPage";
 import ShowtimesPage from "./pages/admin/ShowtimesPage";
 import ManageConcessions from "./pages/admin/ManageConcessions";
 import ManageUsers from "./pages/admin/ManageUsers";
+import PriceRulesPage from "./pages/admin/PriceRulesPage";
+import VouchersPage from "./pages/admin/VouchersPage";
+import LoyaltyTiersPage from "./pages/admin/LoyaltyTiersPage";
+import AuditLogsPage from "./pages/admin/AuditLogsPage";
+import BranchesPage from "./pages/admin/BranchesPage";
 
 import HomePage from "./pages/customer/HomePage";
 import MovieDetailPage from "./pages/customer/MovieDetailPage";
@@ -60,6 +66,7 @@ function App() {
           success: { iconTheme: { primary: '#E50914', secondary: '#fff' } }
         }} 
       />
+      <BranchProvider>
       <Router>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -98,10 +105,15 @@ function App() {
             >
               <Route index element={<AdminDashboard />} />
               <Route path="movies" element={<MoviesPage />} />
+              <Route path="branches" element={<BranchesPage />} />
               <Route path="rooms" element={<RoomsPage />} />
               <Route path="showtimes" element={<ShowtimesPage />} />
               <Route path="concessions" element={<ManageConcessions />} />
+              <Route path="price-rules" element={<PriceRulesPage />} />
+              <Route path="vouchers" element={<VouchersPage />} />
+              <Route path="loyalty-tiers" element={<LoyaltyTiersPage />} />
               <Route path="users" element={<ManageUsers />} />
+              <Route path="audit-logs" element={<AuditLogsPage />} />
             </Route>
 
             {/* Protected Staff Routes */}
@@ -126,6 +138,7 @@ function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Router>
+      </BranchProvider>
     </AuthProvider>
   );
 }
