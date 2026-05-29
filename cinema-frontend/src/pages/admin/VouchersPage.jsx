@@ -9,20 +9,26 @@ import {
 const emptyVoucher = {
   code: "", name: "", description: "", discountType: "percentage",
   discountValue: 0, maxDiscount: null, minOrder: 0, usageLimit: null,
-  perUserLimit: 1, validFrom: "", validTo: "", applicableDays: null, isActive: true,
+  perUserLimit: 1, validFrom: "", validTo: "", applicableDays: null, isActive: true, branchId: null,
 };
 
 export default function VouchersPage() {
   const [vouchers, setVouchers] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...emptyVoucher });
   const [showForm, setShowForm] = useState(false);
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState("");
 
   const fetchData = async () => {
     try {
-      const res = await api.get("/admin/vouchers");
-      setVouchers(res.data);
+      const [voucherRes, branchRes] = await Promise.all([
+        api.get("/admin/vouchers"),
+        api.get("/admin/branches"),
+      ]);
+      setVouchers(voucherRes.data);
+      setBranches(Array.isArray(branchRes.data) ? branchRes.data : (branchRes.data?.data ?? []));
     } catch (e) { toast.error("Lỗi tải dữ liệu"); }
     finally { setLoading(false); }
   };
@@ -69,6 +75,12 @@ export default function VouchersPage() {
   };
 
   const formatMoney = (v) => Number(v).toLocaleString("vi-VN") + "đ";
+
+  const filteredVouchers = vouchers.filter(v => {
+    if (selectedBranchFilter === "global") return !v.branchId;
+    if (selectedBranchFilter) return Number(v.branchId) === Number(selectedBranchFilter);
+    return true;
+  });
 
   if (loading) return <div className="text-center py-20 text-gray-400">Đang tải...</div>;
 
@@ -117,6 +129,14 @@ export default function VouchersPage() {
                 className="w-full bg-[#2a2a2a] border border-[#444] rounded-lg px-3 py-2 text-white"
                 placeholder="Mô tả ngắn cho voucher"
               />
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 mb-1 block">Chi nhánh áp dụng</label>
+              <select value={form.branchId ?? ""} onChange={e => setForm({...form, branchId: e.target.value ? Number(e.target.value) : null})}
+                className="w-full bg-[#2a2a2a] border border-[#444] rounded-lg px-3 py-2 text-white">
+                <option value="">Toàn hệ thống</option>
+                {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              </select>
             </div>
             <div>
               <label className="text-sm text-gray-400 mb-1 block">Loại giảm giá</label>
@@ -193,9 +213,24 @@ export default function VouchersPage() {
         </div>
       )}
 
+      {/* Branch Filter */}
+      <div className="flex gap-4 mb-4">
+        <select
+          value={selectedBranchFilter}
+          onChange={(e) => setSelectedBranchFilter(e.target.value)}
+          className="bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[#E50914] w-full max-w-xs"
+        >
+          <option value="">Tất cả voucher</option>
+          <option value="global">Voucher toàn hệ thống</option>
+          {branches.map((b) => (
+            <option key={b.id} value={String(b.id)}>{b.name}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Voucher Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {vouchers.map(v => {
+        {filteredVouchers.map(v => {
           const isExpired = new Date(v.validTo) < new Date();
           const isUpcoming = new Date(v.validFrom) > new Date();
           return (
@@ -233,6 +268,12 @@ export default function VouchersPage() {
                   <span className="flex items-center gap-1"><Calendar size={14} /> Hiệu lực</span>
                   <span>
                     {new Date(v.validFrom).toLocaleDateString('vi-VN')} — {new Date(v.validTo).toLocaleDateString('vi-VN')}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Chi nhánh áp dụng</span>
+                  <span className="text-white font-semibold">
+                    {v.branchId ? (branches.find(b => b.id === v.branchId)?.name || `Chi nhánh #${v.branchId}`) : "Toàn hệ thống"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -281,10 +322,10 @@ export default function VouchersPage() {
           );
         })}
       </div>
-      {vouchers.length === 0 && (
+      {filteredVouchers.length === 0 && (
         <div className="text-center py-12 text-gray-500">
           <Tag size={48} className="mx-auto mb-3 opacity-30" />
-          <p>Chưa có voucher nào. Tạo voucher đầu tiên!</p>
+          <p>{vouchers.length === 0 ? "Chưa có voucher nào. Tạo voucher đầu tiên!" : "Không có voucher nào phù hợp bộ lọc."}</p>
         </div>
       )}
     </div>

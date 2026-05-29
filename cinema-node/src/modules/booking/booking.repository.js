@@ -2,14 +2,14 @@
 import pool from '../../config/database.js';
 
 const mapBooking = (r) => ({
-  id:          r.id,
-  userId:      r.user_id,
-  showtimeId:  r.showtime_id,
-  branchId:    r.branch_id ?? null,
+  id: r.id,
+  userId: r.user_id,
+  showtimeId: r.showtime_id,
+  branchId: r.branch_id ?? null,
   totalAmount: r.total_amount,
-  status:      r.status,
-  qrCode:      r.qr_code,
-  createdAt:   r.created_at,
+  status: r.status,
+  qrCode: r.qr_code,
+  createdAt: r.created_at,
 });
 
 const findByUser = async (userId) => {
@@ -42,7 +42,7 @@ const findByUser = async (userId) => {
     showtime: {
       startTime: r.start_time, endTime: r.end_time, format: r.format,
       movie: { title: r.movie_title, poster: r.movie_poster },
-      room:  { name: r.room_name, type: r.room_type },
+      room: { name: r.room_name, type: r.room_type },
       branch: r.branch_name ? { id: r.branch_id, name: r.branch_name, city: r.branch_city } : null,
     },
   }));
@@ -73,7 +73,7 @@ const findByIdWithDetails = async (id) => {
     booking.showtime = {
       id: s.id, startTime: s.start_time, endTime: s.end_time, format: s.format,
       movie: { id: s.movie_id, title: s.movie_title, poster: s.movie_poster },
-      room:  { id: s.room_id, name: s.room_name, type: s.room_type },
+      room: { id: s.room_id, name: s.room_name, type: s.room_type },
       branch: s.branch_name ? { id: booking.branchId, name: s.branch_name, city: s.branch_city } : null,
     };
   }
@@ -85,6 +85,19 @@ const findByIdWithDetails = async (id) => {
     [id]
   );
   booking.seats = seats;
+
+  const [concessions] = await pool.query(
+    `SELECT c.name, bc.quantity, bc.price
+     FROM booking_concessions bc
+     JOIN concessions c ON bc.concession_id = c.id
+     WHERE bc.booking_id = ?`,
+    [id]
+  );
+  booking.concessions = concessions.map(c => ({
+    name: c.name,
+    quantity: c.quantity,
+    price: Number(c.price),
+  }));
 
   return booking;
 };

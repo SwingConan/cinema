@@ -36,6 +36,7 @@ export default function ManageUsers() {
   const [loading,  setLoading]  = useState(true);
   const [search,   setSearch]   = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [branchFilter, setBranchFilter] = useState("");
   const [page,     setPage]     = useState(1);
   const [toast,    setToast]    = useState(null); // { type: 'success'|'error', msg }
   const [branches, setBranches] = useState([]);
@@ -54,7 +55,7 @@ export default function ManageUsers() {
     setLoading(true);
     try {
       const res = await api.get("/admin/users", {
-        params: { search, role: roleFilter, page, per_page: PER_PAGE },
+        params: { search, role: roleFilter, branch_id: branchFilter, page, per_page: PER_PAGE },
       });
       setUsers(res.data.data);
       setTotal(res.data.total);
@@ -63,7 +64,7 @@ export default function ManageUsers() {
     } finally {
       setLoading(false);
     }
-  }, [search, roleFilter, page]);
+  }, [search, roleFilter, branchFilter, page]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
@@ -74,7 +75,7 @@ export default function ManageUsers() {
   }, []);
 
   // Reset về trang 1 khi filter thay đổi
-  useEffect(() => { setPage(1); }, [search, roleFilter]);
+  useEffect(() => { setPage(1); }, [search, roleFilter, branchFilter]);
 
   const handleChangeRole = async (userId, role) => {
     setOpenDropdown(null);
@@ -155,6 +156,19 @@ export default function ManageUsers() {
           <option value="admin">Admin</option>
           <option value="staff">Staff</option>
           <option value="customer">Customer</option>
+        </select>
+        {/* Branch filter */}
+        <select
+          value={branchFilter}
+          onChange={(e) => setBranchFilter(e.target.value)}
+          className="bg-[#111] border border-[#333] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#E50914] transition-colors min-w-[180px]"
+        >
+          <option value="">Tất cả chi nhánh</option>
+          {branches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
         </select>
       </div>
 

@@ -21,7 +21,7 @@ const mapShowtime = (r) => ({
   room: r.room_name ? {
     id: r.room_id, name: r.room_name, type: r.room_type, totalSeats: r.room_total_seats,
     branchId: r.branch_id ?? null,
-    branch: r.branch_name ? { id: r.branch_id, name: r.branch_name, city: r.branch_city } : null,
+    branch: r.branch_name ? { id: r.branch_id, name: r.branch_name, city: r.branch_city, address: r.branch_address } : null,
   } : undefined,
 });
 
@@ -30,7 +30,7 @@ const BASE_SELECT = `
     m.title AS movie_title, m.duration AS movie_duration,
     m.poster AS movie_poster, m.rated AS movie_rated, m.trailer_url AS movie_trailer_url,
     r.name AS room_name, r.type AS room_type, r.total_seats AS room_total_seats,
-    r.branch_id, br.name AS branch_name, br.city AS branch_city,
+    r.branch_id, br.name AS branch_name, br.city AS branch_city, br.address AS branch_address,
     (
       SELECT COUNT(*) FROM booking_seats bs
       JOIN bookings b ON bs.booking_id = b.id

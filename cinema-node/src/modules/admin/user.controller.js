@@ -3,15 +3,16 @@ import { UserAdminRepository } from './user.repository.js';
 
 export const UserAdminController = {
 
-  // GET /api/admin/users?search=&role=&page=&per_page=
+  // GET /api/admin/users?search=&role=&page=&per_page=&branch_id=
   async index(req, res) {
     try {
-      const search  = req.query.search   || '';
-      const role    = req.query.role     || '';
-      const page    = parseInt(req.query.page)     || 1;
-      const perPage = parseInt(req.query.per_page) || 50;
+      const search   = req.query.search   || '';
+      const role     = req.query.role     || '';
+      const branchId = req.query.branch_id || req.query.branchId || '';
+      const page     = parseInt(req.query.page)     || 1;
+      const perPage  = parseInt(req.query.per_page) || 50;
 
-      const { rows, total } = await UserAdminRepository.findAll({ search, role, page, perPage });
+      const { rows, total } = await UserAdminRepository.findAll({ search, role, branchId, page, perPage });
       return res.json({ data: rows, total, page, per_page: perPage });
     } catch (err) {
       res.status(500).json({ message: err.message });

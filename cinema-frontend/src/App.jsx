@@ -35,6 +35,8 @@ import PaymentResultPage from "./pages/customer/PaymentResultPage";
 import ProfilePage from "./pages/customer/ProfilePage";
 
 import StaffDashboard from "./pages/staff/StaffDashboard";
+import StaffOverview from "./pages/staff/StaffOverview";
+import StaffLayout from "./layouts/StaffLayout";
 import POSPage from "./pages/staff/POSPage";
 
 import MoviesListPage from "./pages/customer/MoviesListPage";
@@ -121,18 +123,14 @@ function App() {
               path="staff"
               element={
                 <ProtectedRoute allowedRoles={[ROLE_STAFF, ROLE_ADMIN]}>
-                  <StaffDashboard />
+                  <StaffLayout />
                 </ProtectedRoute>
               }
-            />
-            <Route
-              path="staff/pos"
-              element={
-                <ProtectedRoute allowedRoles={[ROLE_STAFF, ROLE_ADMIN]}>
-                  <POSPage />
-                </ProtectedRoute>
-              }
-            />
+            >
+              <Route index element={<StaffOverview />} />
+              <Route path="pos" element={<POSPage />} />
+              <Route path="checkin" element={<StaffDashboard />} />
+            </Route>
           </Route>
 
           <Route path="*" element={<NotFound />} />

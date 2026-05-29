@@ -4,13 +4,14 @@
 //   Mode A: Camera Scanner (webcam / camera điện thoại)
 //   Mode B: Nhập tay / Súng quét USB (Input box)
 // =============================================
-import { useState, useRef, useCallback, lazy, Suspense } from "react";
+import { useState, useRef, useCallback, useEffect, lazy, Suspense } from "react";
 import api from "../../utils/api";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   QrCode, CheckCircle2, XCircle, Camera, Keyboard,
-  User, Film, MapPin, Clock, CreditCard, Armchair,
+  User, Film, MapPin, Clock, CreditCard, Armchair, Printer, Coffee,
 } from "lucide-react";
+import { buildPremiumTicketData, printPremiumTicket } from "../../components/staff/PremiumTicket";
 
 // Lazy-load Scanner (có thể dùng WebRTC, không load ở tab Nhập Tay)
 const Scanner = lazy(() => import("../../components/Scanner"));
@@ -29,7 +30,9 @@ const playBeep = (success = true) => {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.4);
-  } catch (_) {}
+  } catch {
+    // Audio feedback is optional; scanning should continue if Web Audio is blocked.
+  }
 };
 
 // ── Format helpers ──────────────────────────────────────────────────────
@@ -43,7 +46,7 @@ const fmtDatetime = (val) => {
 };
 
 // ── ResultCard ──────────────────────────────────────────────────────────
-function ResultCard({ result }) {
+function ResultCard({ result, branchInfo }) {
   const ok = result.status === 'success';
   return (
     <div className={`rounded-2xl border-2 shadow-2xl overflow-hidden animate-fade-in
@@ -74,6 +77,14 @@ function ResultCard({ result }) {
         const seats = Array.isArray(b.seats)
           ? b.seats.map(s => `${s.row}${s.column}`).join(', ')
           : '—';
+        const concessions = Array.isArray(b.concessions) ? b.concessions : [];
+        const handlePrintTicket = () => {
+          const ticket = buildPremiumTicketData({ booking: b, branchInfo });
+          const opened = printPremiumTicket(ticket, `Cinema Ticket #${b.id}`);
+          if (!opened) {
+            alert("Trình duyệt chặn popup. Vui lòng cho phép popup để in vé.");
+          }
+        };
         return (
           <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div className="flex items-start gap-3">
@@ -96,6 +107,9 @@ function ResultCard({ result }) {
               <div>
                 <p className="text-gray-500 text-xs uppercase font-bold">Phòng chiếu</p>
                 <p className="text-white font-bold">{b.showtime?.room?.name}</p>
+                {b.showtime?.branch && (
+                  <p className="text-gray-400 text-xs mt-0.5">{b.showtime.branch.name} · {b.showtime.branch.city}</p>
+                )}
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -119,6 +133,29 @@ function ResultCard({ result }) {
                 <p className="text-white font-bold">{fmtCurrency(b.totalAmount)}</p>
               </div>
             </div>
+            {concessions.length > 0 && (
+              <div className="sm:col-span-2 pt-4 border-t border-green-800/40">
+                <div className="flex items-center gap-2 text-gray-500 text-xs uppercase font-bold mb-2">
+                  <Coffee className="w-4 h-4 text-green-400" />
+                  Bắp nước
+                </div>
+                <div className="space-y-1">
+                  {concessions.map((item, index) => (
+                    <div key={`${item.name}-${index}`} className="flex justify-between gap-4 text-sm text-gray-300">
+                      <span>{item.quantity}x {item.name}</span>
+                      <span className="font-bold text-white">{fmtCurrency(Number(item.price || 0) * Number(item.quantity || 0))}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button
+              onClick={handlePrintTicket}
+              className="sm:col-span-2 flex items-center justify-center gap-2 rounded-xl bg-white text-black py-3 text-sm font-black uppercase tracking-wide hover:bg-green-100 transition-colors"
+            >
+              <Printer className="w-5 h-5" />
+              In vé giấy (Kỷ niệm)
+            </button>
           </div>
         );
       })()}
@@ -134,6 +171,18 @@ export default function StaffDashboard() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const inputRef = useRef(null);
+  const [branchInfo, setBranchInfo] = useState(null);
+
+  // Fetch chi nhánh của staff
+  useEffect(() => {
+    if (user?.branch_id) {
+      api.get('/public/branches').then(res => {
+        const list = Array.isArray(res.data) ? res.data : (res.data?.data ?? res.data?.value ?? []);
+        const myBranch = list.find(b => b.id === user.branch_id);
+        if (myBranch) setBranchInfo(myBranch);
+      }).catch(() => {});
+    }
+  }, [user]);
 
   // ── Gọi API verify ─────────────────────────────────────────────────
   const verify = useCallback(async (code) => {
@@ -189,6 +238,9 @@ export default function StaffDashboard() {
           </h1>
           <p className="text-gray-500 mt-1 font-medium">
             Nhân viên: <span className="text-gray-300 font-bold">{user?.name}</span>
+            {branchInfo && (
+              <span className="text-gray-500"> · {branchInfo.name}</span>
+            )}
           </p>
         </div>
 
@@ -297,7 +349,7 @@ export default function StaffDashboard() {
           </div>
         )}
 
-        {!loading && result && <ResultCard result={result} />}
+        {!loading && result && <ResultCard result={result} branchInfo={branchInfo} />}
 
         {/* ── TIPS ──────────────────────────────────────────────── */}
         {!result && !loading && (

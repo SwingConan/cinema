@@ -1,7 +1,7 @@
 // src/modules/checkin/checkin.service.js
 import { CheckinRepository } from './checkin.repository.js';
 
-const verify = async (qrCode) => {
+const verify = async (qrCode, staffBranchId = null) => {
   const booking = await CheckinRepository.findByQrCode(qrCode);
 
   if (!booking) {
@@ -14,6 +14,12 @@ const verify = async (qrCode) => {
   if (booking.status !== 'paid') {
     const e = new Error('Vé này chưa được thanh toán thành công.'); e.status = 400;
     e.booking = booking; throw e;
+  }
+
+  // Kiểm tra chi nhánh: staff chỉ soát vé tại rạp mình
+  if (staffBranchId && booking.branchId && Number(booking.branchId) !== Number(staffBranchId)) {
+    const e = new Error('Vé này thuộc chi nhánh khác. Không thể soát tại đây.');
+    e.status = 403; e.booking = booking; throw e;
   }
 
   await CheckinRepository.markAsUsed(booking.id);

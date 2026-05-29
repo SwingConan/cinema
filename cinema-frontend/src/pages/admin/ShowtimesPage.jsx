@@ -88,6 +88,10 @@ export default function ShowtimesPage() {
     }).format(amount);
   };
 
+  const roomFilterOptions = filterBranch === "ALL"
+    ? rooms
+    : rooms.filter((r) => String(r.branchId || r.branch_id || "") === String(filterBranch));
+
   if (loading && showtimes.length === 0)
     return (
       <div className="p-8 text-[#E50914] font-bold animate-pulse">
@@ -160,7 +164,7 @@ export default function ShowtimesPage() {
               className="block w-full bg-[#222] text-white border border-[#444] rounded-lg shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-[#E50914] focus:border-[#E50914] transition-colors"
             >
               <option value="ALL">Tất cả phòng</option>
-              {rooms.map((r) => (
+              {roomFilterOptions.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name} ({r.branch?.name || "Chưa phân bổ"})
                 </option>
@@ -190,6 +194,7 @@ export default function ShowtimesPage() {
             showtime={editingShowtime}
             movies={movies}
             rooms={rooms}
+            branches={branches}
             onSuccess={handleFormSuccess}
             onCancel={() => setShowForm(false)}
           />

@@ -11,6 +11,8 @@ export default function RoomsPage() {
   const [editingRoom, setEditingRoom] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("ALL");
+  const [branches, setBranches] = useState([]);
+  const [filterBranch, setFilterBranch] = useState("ALL");
 
   const [viewingRoom, setViewingRoom] = useState(null);
   const [roomSeats, setRoomSeats] = useState([]);
@@ -18,7 +20,17 @@ export default function RoomsPage() {
 
   useEffect(() => {
     fetchRooms();
+    fetchBranches();
   }, []);
+
+  const fetchBranches = async () => {
+    try {
+      const res = await api.get("/admin/branches");
+      setBranches(Array.isArray(res.data) ? res.data : (res.data?.data ?? []));
+    } catch (error) {
+      console.error("Error fetching branches", error);
+    }
+  };
 
   const fetchRooms = async () => {
     try {
@@ -124,7 +136,7 @@ export default function RoomsPage() {
               className="block w-full bg-[#222] text-white border border-[#444] rounded-lg shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-[#E50914] focus:border-[#E50914] transition-colors"
             />
           </div>
-          <div className="w-full md:w-1/3">
+          <div className="w-full md:w-1/4">
             <label className="block text-sm font-bold text-gray-400 mb-2 uppercase tracking-wider">
               Loại phòng
             </label>
@@ -138,6 +150,23 @@ export default function RoomsPage() {
               <option value="3D">3D</option>
               <option value="IMAX">IMAX</option>
               <option value="4DX">4DX</option>
+            </select>
+          </div>
+          <div className="w-full md:w-1/4">
+            <label className="block text-sm font-bold text-gray-400 mb-2 uppercase tracking-wider">
+              Chi nhánh
+            </label>
+            <select
+              value={filterBranch}
+              onChange={(e) => setFilterBranch(e.target.value)}
+              className="block w-full bg-[#222] text-white border border-[#444] rounded-lg shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-[#E50914] focus:border-[#E50914] transition-colors"
+            >
+              <option value="ALL">Tất cả chi nhánh</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -185,7 +214,10 @@ export default function RoomsPage() {
                       .includes(searchTerm.toLowerCase());
                     const matchType =
                       filterType === "ALL" || room.type === filterType;
-                    return matchSearch && matchType;
+                    const matchBranch =
+                      filterBranch === "ALL" ||
+                      String(room.branchId || room.branch_id || "") === String(filterBranch);
+                    return matchSearch && matchType && matchBranch;
                   })
                   .map((room) => (
                     <tr
@@ -244,7 +276,7 @@ export default function RoomsPage() {
                 {rooms.length === 0 && !loading && (
                   <tr>
                     <td
-                      colSpan="4"
+                      colSpan="5"
                       className="px-6 py-12 text-center text-gray-500 font-medium bg-[#111]"
                     >
                       Chưa có dữ liệu phòng chiếu. Hãy thêm phòng mới.

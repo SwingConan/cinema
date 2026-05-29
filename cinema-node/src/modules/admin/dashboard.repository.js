@@ -63,18 +63,18 @@ export const DashboardRepository = {
     return row;
   },
 
-  // ── 3. Showtime Heatmap theo khung giờ (trong khoảng lọc) ──────────────
-  // Sáng: 08:00–12:00 | Chiều: 12:00–18:00 | Tối: 18:00–23:59
+  // ── 3. Showtime Heatmap theo khung giờ (5 slot chuẩn ngành) ─────────────
   async getShowtimeHeatmap(startDate, endDate, branchId = null) {
     const branchFilter = branchId ? 'AND b.branch_id = ?' : '';
     const params = branchId ? [startDate, endDate, branchId] : [startDate, endDate];
     const [rows] = await pool.query(`
       SELECT
         CASE
-          WHEN HOUR(s.start_time) >= 8  AND HOUR(s.start_time) < 12 THEN 'Sáng (8h–12h)'
-          WHEN HOUR(s.start_time) >= 12 AND HOUR(s.start_time) < 18 THEN 'Chiều (12h–18h)'
-          WHEN HOUR(s.start_time) >= 18                              THEN 'Tối (18h–24h)'
-          ELSE 'Khác'
+          WHEN HOUR(s.start_time) >= 8  AND HOUR(s.start_time) < 12 THEN 'Buổi sáng (8h–12h)'
+          WHEN HOUR(s.start_time) >= 12 AND HOUR(s.start_time) < 16 THEN 'Buổi trưa (12h–16h)'
+          WHEN HOUR(s.start_time) >= 16 AND HOUR(s.start_time) < 19 THEN 'Buổi chiều (16h–19h)'
+          WHEN HOUR(s.start_time) >= 19 AND HOUR(s.start_time) < 22 THEN 'Giờ vàng (19h–22h)'
+          ELSE 'Suất khuya (22h+)'
         END                         AS time_slot,
         COUNT(bs.id)                AS tickets_sold,
         COUNT(DISTINCT b.id)        AS order_count,
@@ -88,10 +88,11 @@ export const DashboardRepository = {
       GROUP BY time_slot
       ORDER BY
         CASE time_slot
-          WHEN 'Sáng (8h–12h)'   THEN 1
-          WHEN 'Chiều (12h–18h)' THEN 2
-          WHEN 'Tối (18h–24h)'   THEN 3
-          ELSE 4
+          WHEN 'Buổi sáng (8h–12h)'  THEN 1
+          WHEN 'Buổi trưa (12h–16h)' THEN 2
+          WHEN 'Buổi chiều (16h–19h)' THEN 3
+          WHEN 'Giờ vàng (19h–22h)'  THEN 4
+          ELSE 5
         END
     `, params);
     return rows;
@@ -215,13 +216,14 @@ export const DashboardRepository = {
     return rows;
   },
 
-  // ── 8. Overview tổng hợp (giữ lại cho KPI cards) ──────────────────────
-  async getOverview(startDate, endDate, branchId = null) {
+  // ── 8. Overview tổng hợp (KPI cards + so sánh kỳ trước) ────────────────
+  async getOverview(startDate, endDate, prevStartDate, prevEndDate, branchId = null) {
     const branchFilter = branchId ? 'AND b.branch_id = ?' : '';
     const ticketBranchFilter = branchId ? 'AND b2.branch_id = ?' : '';
     
     const query = `
       SELECT
+        /* ── Kỳ hiện tại ── */
         COALESCE(SUM(CASE
           WHEN b.status = 'paid' AND DATE(b.created_at) BETWEEN ? AND ?
           THEN b.total_amount ELSE 0 END), 0)   AS total_revenue,
@@ -236,25 +238,48 @@ export const DashboardRepository = {
           WHEN b.status = 'paid'
            AND DATE(b.created_at) BETWEEN ? AND ? THEN 1 END) AS total_orders,
 
+        /* ── Kỳ trước (period-over-period) ── */
         COALESCE(SUM(CASE
-          WHEN b.status = 'paid'
-           AND MONTH(b.created_at) = MONTH(CURDATE())
-           AND YEAR(b.created_at)  = YEAR(CURDATE())
-          THEN b.total_amount ELSE 0 END), 0)   AS current_month_revenue,
+          WHEN b.status = 'paid' AND DATE(b.created_at) BETWEEN ? AND ?
+          THEN b.total_amount ELSE 0 END), 0)   AS prev_total_revenue,
 
-        COALESCE(SUM(CASE
+        (SELECT COUNT(*) FROM booking_seats bs3
+          JOIN bookings b3 ON b3.id = bs3.booking_id
+          WHERE b3.status = 'paid'
+            AND DATE(b3.created_at) BETWEEN ? AND ?
+            ${ticketBranchFilter})  AS prev_total_tickets,
+
+        COUNT(CASE
           WHEN b.status = 'paid'
-           AND MONTH(b.created_at) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))
-           AND YEAR(b.created_at)  = YEAR(CURDATE())
-          THEN b.total_amount ELSE 0 END), 0)   AS last_month_revenue
+           AND DATE(b.created_at) BETWEEN ? AND ? THEN 1 END) AS prev_total_orders,
+
+        /* ── Doanh thu F&B kỳ hiện tại ── */
+        (SELECT COALESCE(SUM(bc.price * bc.quantity), 0)
+         FROM booking_concessions bc
+         JOIN bookings b4 ON b4.id = bc.booking_id
+         WHERE b4.status = 'paid'
+           AND DATE(b4.created_at) BETWEEN ? AND ?
+           ${branchFilter ? 'AND b4.branch_id = ?' : ''}) AS concession_revenue,
+
+        /* ── Doanh thu F&B kỳ trước ── */
+        (SELECT COALESCE(SUM(bc2.price * bc2.quantity), 0)
+         FROM booking_concessions bc2
+         JOIN bookings b5 ON b5.id = bc2.booking_id
+         WHERE b5.status = 'paid'
+           AND DATE(b5.created_at) BETWEEN ? AND ?
+           ${branchFilter ? 'AND b5.branch_id = ?' : ''}) AS prev_concession_revenue
 
       FROM bookings b
       WHERE 1=1 ${branchFilter}
     `;
 
     const params = branchId 
-      ? [startDate, endDate, startDate, endDate, branchId, startDate, endDate, branchId]
-      : [startDate, endDate, startDate, endDate, startDate, endDate];
+      ? [startDate, endDate, startDate, endDate, branchId, startDate, endDate,
+         prevStartDate, prevEndDate, prevStartDate, prevEndDate, branchId, prevStartDate, prevEndDate,
+         startDate, endDate, branchId, prevStartDate, prevEndDate, branchId, branchId]
+      : [startDate, endDate, startDate, endDate, startDate, endDate,
+         prevStartDate, prevEndDate, prevStartDate, prevEndDate, prevStartDate, prevEndDate,
+         startDate, endDate, prevStartDate, prevEndDate];
 
     const [[row]] = await pool.query(query, params);
     return row;
@@ -281,8 +306,96 @@ export const DashboardRepository = {
         AND DATE(b.created_at) BETWEEN ? AND ?
         ${branchFilter}
       ORDER BY b.created_at DESC
-      LIMIT 20
+      LIMIT 10
     `, params);
+    return rows;
+  },
+
+  // ── 10. So sánh hiệu suất giữa các chi nhánh ─────────────────────────
+  async getBranchComparison(startDate, endDate) {
+    const [rows] = await pool.query(`
+      SELECT
+        br.id,
+        br.name,
+        br.city,
+        COALESCE(revenue.ticket_revenue, 0)     AS ticket_revenue,
+        COALESCE(revenue.concession_revenue, 0) AS concession_revenue,
+        COALESCE(revenue.total_orders, 0)        AS total_orders,
+        COALESCE(revenue.total_tickets, 0)       AS total_tickets,
+        COALESCE(occ.occupancy_rate, 0)          AS occupancy_rate
+      FROM branches br
+      LEFT JOIN (
+        SELECT
+          b.branch_id,
+          COALESCE(SUM(bs.price), 0)               AS ticket_revenue,
+          COALESCE(SUM(bc.price * bc.quantity), 0)  AS concession_revenue,
+          COUNT(DISTINCT b.id)                      AS total_orders,
+          COUNT(DISTINCT bs.id)                     AS total_tickets
+        FROM bookings b
+        LEFT JOIN booking_seats       bs ON bs.booking_id = b.id
+        LEFT JOIN booking_concessions bc ON bc.booking_id = b.id
+        WHERE b.status = 'paid'
+          AND DATE(b.created_at) BETWEEN ? AND ?
+        GROUP BY b.branch_id
+      ) revenue ON revenue.branch_id = br.id
+      LEFT JOIN (
+        SELECT
+          r.branch_id,
+          ROUND(
+            COALESCE(SUM(sold.sold_seats), 0) * 100.0
+            / NULLIF(COALESCE(SUM(r.total_seats), 0), 0), 1
+          ) AS occupancy_rate
+        FROM showtimes s
+        JOIN rooms r ON r.id = s.room_id
+        LEFT JOIN (
+          SELECT b2.showtime_id, COUNT(bs2.id) AS sold_seats
+          FROM bookings b2
+          JOIN booking_seats bs2 ON bs2.booking_id = b2.id
+          WHERE b2.status = 'paid' AND DATE(b2.created_at) = CURDATE()
+          GROUP BY b2.showtime_id
+        ) sold ON sold.showtime_id = s.id
+        WHERE DATE(s.start_time) = CURDATE()
+        GROUP BY r.branch_id
+      ) occ ON occ.branch_id = br.id
+      WHERE br.status = 'active'
+      ORDER BY (COALESCE(revenue.ticket_revenue, 0) + COALESCE(revenue.concession_revenue, 0)) DESC
+    `, [startDate, endDate]);
+    return rows;
+  },
+
+  // ── 11. Phân bổ phương thức thanh toán ─────────────────────────────────
+  async getPaymentMethodSplit(startDate, endDate, branchId = null) {
+    const branchFilter = branchId ? 'AND b.branch_id = ?' : '';
+    const params = branchId ? [startDate, endDate, branchId] : [startDate, endDate];
+    const [rows] = await pool.query(`
+      SELECT
+        p.method,
+        COUNT(DISTINCT b.id)             AS order_count,
+        COALESCE(SUM(b.total_amount), 0) AS revenue
+      FROM bookings b
+      JOIN payments p ON p.booking_id = b.id AND p.status = 'success'
+      WHERE b.status = 'paid'
+        AND DATE(b.created_at) BETWEEN ? AND ?
+        ${branchFilter}
+      GROUP BY p.method
+      ORDER BY revenue DESC
+    `, params);
+    return rows;
+  },
+
+  // ── 12. Phân bổ khách hàng theo hạng thành viên ───────────────────────
+  async getMemberTierDistribution() {
+    const [rows] = await pool.query(`
+      SELECT
+        member_tier AS tier,
+        COUNT(*)    AS count,
+        COALESCE(SUM(total_spent), 0)    AS total_spent,
+        COALESCE(SUM(loyalty_points), 0) AS total_points
+      FROM users
+      WHERE role = 'customer'
+      GROUP BY member_tier
+      ORDER BY FIELD(member_tier, 'bronze', 'silver', 'gold', 'platinum')
+    `);
     return rows;
   },
 };

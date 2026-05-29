@@ -115,6 +115,7 @@ const _lockAndPriceSeats = async (conn, { showtimeId, seatIds, userId }) => {
       roomType,
       startTime: showtime.start_time,
       seatType:  seat.type,
+      branchId: showtime.branch_id,
     });
 
     seatAmount += finalPrice;
@@ -126,13 +127,13 @@ const _lockAndPriceSeats = async (conn, { showtimeId, seatIds, userId }) => {
 
 // ── SHARED HELPER: Validate + tính tiền concessions bên trong Transaction ─
 // Trả về { concessionsToAttach, concessionAmount }
-const _priceConcessions = async (conn, concessions) => {
+const _priceConcessions = async (conn, concessions, branchId = null) => {
   if (!concessions || concessions.length === 0) {
     return { concessionsToAttach: [], concessionAmount: 0 };
   }
 
   const ids = concessions.map(c => c.id);
-  const dbItems = await ConcessionRepository.findByIdsInTx(conn, ids);
+  const dbItems = await ConcessionRepository.findByIdsInTx(conn, ids, branchId);
 
   // Validate: tất cả id phải tồn tại và đang active
   const dbMap = new Map(dbItems.map(item => [item.id, item]));
@@ -152,6 +153,14 @@ const _priceConcessions = async (conn, concessions) => {
       throw Object.assign(new Error(`Số lượng không hợp lệ cho món ID=${c.id}.`), { status: 422 });
     }
     const unitPrice = Number(dbItem.price); // Luôn lấy giá từ DB, không tin Client
+    if (branchId) {
+      if (dbItem.inventory_status !== 'available') {
+        throw Object.assign(new Error(`Mon ID=${c.id} khong kha dung tai chi nhanh nay.`), { status: 422 });
+      }
+      if (Number(dbItem.stock_quantity || 0) < qty) {
+        throw Object.assign(new Error(`Ton kho mon ID=${c.id} khong du.`), { status: 422 });
+      }
+    }
     concessionAmount += unitPrice * qty;
     concessionsToAttach.push({ concessionId: c.id, quantity: qty, price: unitPrice });
   }
@@ -234,7 +243,7 @@ const createBooking = async ({ userId, showtimeId, seatIds, concessions = [], vo
     });
 
     // Bước 2: Validate + tính tiền concessions
-    const { concessionsToAttach, concessionAmount } = await _priceConcessions(conn, concessions);
+    const { concessionsToAttach, concessionAmount } = await _priceConcessions(conn, concessions, showtime.branch_id);
 
     // Bước 3: Tổng tiền trước giảm giá
     const subtotal = seatAmount + concessionAmount;
@@ -246,6 +255,7 @@ const createBooking = async ({ userId, showtimeId, seatIds, concessions = [], vo
       voucherValidation = await VoucherService.validateVoucher(voucherCode, {
         userId,
         orderAmount: subtotal,
+        branchId: showtime.branch_id,
       });
       discountAmount = voucherValidation.discountAmount;
       voucherId = voucherValidation.voucher.id;
@@ -266,6 +276,7 @@ const createBooking = async ({ userId, showtimeId, seatIds, concessions = [], vo
 
     // Bước 7: Gắn concessions (nếu có)
     await ConcessionRepository.attachToBooking(conn, bookingId, concessionsToAttach);
+    await ConcessionRepository.decrementBranchStock(conn, showtime.branch_id, concessionsToAttach);
 
     // Bước 8: Ghi lại voucher usage (nếu có)
     if (voucherId) {
@@ -338,7 +349,7 @@ const createPOSBooking = async ({ staffId, staffBranchId = null, staffRole = 'st
     }
 
     // Bước 2: Validate + tính tiền concessions
-    const { concessionsToAttach, concessionAmount } = await _priceConcessions(conn, concessions);
+    const { concessionsToAttach, concessionAmount } = await _priceConcessions(conn, concessions, showtimeBranch?.branch_id);
 
     // Bước 3: Tổng tiền
     const totalAmount = seatAmount + concessionAmount;
@@ -361,6 +372,7 @@ const createPOSBooking = async ({ staffId, staffBranchId = null, staffRole = 'st
 
     // Bước 6: Gắn concessions
     await ConcessionRepository.attachToBooking(conn, bookingId, concessionsToAttach);
+    await ConcessionRepository.decrementBranchStock(conn, showtimeBranch?.branch_id, concessionsToAttach);
 
     if (isCash) {
       // ── TIỀN MẶT: Hoàn tất ngay ────────────────────────────────────────

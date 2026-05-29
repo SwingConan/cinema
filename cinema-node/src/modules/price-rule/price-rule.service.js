@@ -64,7 +64,7 @@ import pool from '../../config/database.js';
 const getShowtimePrices = async (showtimeId) => {
   const [rows] = await pool.query(
     `SELECT s.id, s.start_time, s.price_regular, s.price_vip, s.price_couple,
-            r.type AS room_type, r.name AS room_name
+            r.type AS room_type, r.name AS room_name, r.branch_id
      FROM showtimes s
      JOIN rooms r ON s.room_id = r.id
      WHERE s.id = ? LIMIT 1`,
@@ -75,13 +75,13 @@ const getShowtimePrices = async (showtimeId) => {
   }
 
   const showtime = rows[0];
-  const { room_type, start_time } = showtime;
+  const { room_type, start_time, branch_id } = showtime;
 
   // Tính giá cho từng loại ghế
   const [regular, vip, couple] = await Promise.all([
-    PriceRuleRepository.calculateDynamicPrice(Number(showtime.price_regular), { roomType: room_type, startTime: start_time, seatType: 'regular' }),
-    PriceRuleRepository.calculateDynamicPrice(Number(showtime.price_vip),     { roomType: room_type, startTime: start_time, seatType: 'vip' }),
-    PriceRuleRepository.calculateDynamicPrice(Number(showtime.price_couple),  { roomType: room_type, startTime: start_time, seatType: 'couple' }),
+    PriceRuleRepository.calculateDynamicPrice(Number(showtime.price_regular), { roomType: room_type, startTime: start_time, seatType: 'regular', branchId: branch_id }),
+    PriceRuleRepository.calculateDynamicPrice(Number(showtime.price_vip),     { roomType: room_type, startTime: start_time, seatType: 'vip', branchId: branch_id }),
+    PriceRuleRepository.calculateDynamicPrice(Number(showtime.price_couple),  { roomType: room_type, startTime: start_time, seatType: 'couple', branchId: branch_id }),
   ]);
 
   return {

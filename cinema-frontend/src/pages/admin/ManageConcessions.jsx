@@ -237,20 +237,37 @@ export default function ManageConcessions() {
   const [delTarget, setDelTarget] = useState(null); // item{} to delete
   const [deleting, setDeleting] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
+  const [savingInventoryId, setSavingInventoryId] = useState(null);
+  const [branches, setBranches] = useState([]);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
   const [error, setError]       = useState("");
+
+  const fetchBranches = useCallback(async () => {
+    try {
+      const res = await api.get("/admin/branches");
+      const list = Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+      setBranches(list);
+      setSelectedBranchId((current) => current || (list[0]?.id ? String(list[0].id) : ""));
+    } catch {
+      setError("Không thể tải danh sách chi nhánh.");
+    }
+  }, []);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get("/admin/concessions");
+      const res = await api.get("/admin/concessions", {
+        params: selectedBranchId ? { branch_id: selectedBranchId } : {},
+      });
       setItems(res.data);
     } catch {
       setError("Không thể tải danh sách. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedBranchId]);
 
+  useEffect(() => { fetchBranches(); }, [fetchBranches]);
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const handleDelete = async () => {
@@ -285,6 +302,28 @@ export default function ManageConcessions() {
     }
   };
 
+  const handleInventoryChange = (id, patch) => {
+    setItems((current) => current.map((item) => (
+      item.id === id ? { ...item, ...patch } : item
+    )));
+  };
+
+  const handleSaveInventory = async (item) => {
+    if (!selectedBranchId) return;
+    setSavingInventoryId(item.id);
+    try {
+      const res = await api.put(`/admin/concessions/${item.id}/branches/${selectedBranchId}/inventory`, {
+        stockQuantity: Number(item.stockQuantity || 0),
+        status: item.inventoryStatus || "available",
+      });
+      setItems((current) => current.map((row) => row.id === item.id ? { ...row, ...res.data } : row));
+    } catch (err) {
+      setError(err.response?.data?.message || "Cập nhật tồn kho thất bại.");
+    } finally {
+      setSavingInventoryId(null);
+    }
+  };
+
   const filtered = items.filter(it =>
     it.name?.toLowerCase().includes(search.toLowerCase()) ||
     it.description?.toLowerCase().includes(search.toLowerCase())
@@ -301,7 +340,7 @@ export default function ManageConcessions() {
             Quản lý F&amp;B
           </h1>
           <p className="text-gray-500 text-sm pl-4 mt-0.5">
-            {items.length} món · {items.filter(i => i.is_active).length} đang hiển thị
+            {items.length} món · {items.filter(i => i.isActive).length} đang hiển thị
           </p>
         </div>
         <button onClick={() => setModal("add")}
@@ -332,6 +371,19 @@ export default function ManageConcessions() {
         )}
       </div>
 
+      <div className="max-w-sm">
+        <select
+          value={selectedBranchId}
+          onChange={(e) => setSelectedBranchId(e.target.value)}
+          className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[#E50914]"
+        >
+          <option value="">Tất cả chi nhánh</option>
+          {branches.map((branch) => (
+            <option key={branch.id} value={branch.id}>{branch.name}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Table */}
       <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl overflow-hidden shadow-lg">
         {loading ? (
@@ -353,6 +405,8 @@ export default function ManageConcessions() {
                   <th className="px-5 py-4 font-bold text-left">Hình / Tên món</th>
                   <th className="px-5 py-4 font-bold text-left hidden md:table-cell">Mô tả</th>
                   <th className="px-5 py-4 font-bold text-right">Giá</th>
+                  <th className="px-5 py-4 font-bold text-center">Tồn kho</th>
+                  <th className="px-5 py-4 font-bold text-center">Kho chi nhánh</th>
                   <th className="px-5 py-4 font-bold text-center">Trạng thái</th>
                   <th className="px-5 py-4 font-bold text-center">Thao tác</th>
                 </tr>
@@ -391,6 +445,44 @@ export default function ManageConcessions() {
                     </td>
 
                     {/* Trạng thái — click để toggle */}
+                    <td className="px-5 py-4 text-center">
+                      {selectedBranchId ? (
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.stockQuantity ?? 0}
+                          onChange={(e) => handleInventoryChange(item.id, { stockQuantity: Number(e.target.value) })}
+                          className="w-24 rounded-lg border border-[#333] bg-[#111] px-3 py-2 text-center text-white outline-none focus:border-[#E50914]"
+                        />
+                      ) : (
+                        <span className="text-gray-600">-</span>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-4 text-center">
+                      {selectedBranchId ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <select
+                            value={item.inventoryStatus || "available"}
+                            onChange={(e) => handleInventoryChange(item.id, { inventoryStatus: e.target.value })}
+                            className="rounded-lg border border-[#333] bg-[#111] px-3 py-2 text-white outline-none focus:border-[#E50914]"
+                          >
+                            <option value="available">Sẵn sàng</option>
+                            <option value="unavailable">Ngừng phục vụ</option>
+                          </select>
+                          <button
+                            onClick={() => handleSaveInventory(item)}
+                            disabled={savingInventoryId === item.id}
+                            className="rounded-lg bg-[#333] px-3 py-2 text-xs font-bold text-gray-200 hover:bg-[#444] disabled:opacity-50"
+                          >
+                            {savingInventoryId === item.id ? <Loader2 size={14} className="animate-spin" /> : "Lưu"}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-600">Chọn chi nhánh</span>
+                      )}
+                    </td>
+
                     <td className="px-5 py-4 text-center">
                       <button onClick={() => handleToggleActive(item)}
                         disabled={togglingId === item.id}

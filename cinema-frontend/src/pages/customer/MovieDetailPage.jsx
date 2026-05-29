@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "../../utils/api";
 import { useAuth } from "../../contexts/AuthContext";
-import { useBranch } from "../../contexts/BranchContext";
 import {
   Clock,
   Calendar,
@@ -13,16 +12,23 @@ import {
   MessageSquare,
   Send,
   Edit3,
+  MapPin,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  Building2,
 } from "lucide-react";
 
 export default function MovieDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
-  const { selectedBranchId, selectedBranch } = useBranch();
 
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState("");
+  const [selectedCity, setSelectedCity] = useState("");
+  const [showCityPicker, setShowCityPicker] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
   const [expandedBranchIds, setExpandedBranchIds] = useState({});
 
   const [reviews, setReviews] = useState([]);
@@ -166,6 +172,45 @@ export default function MovieDetailPage() {
     });
     return cityMap;
   }, [showtimesByBranch]);
+
+  const availableCities = useMemo(() => {
+    return Object.keys(branchesByCity).sort();
+  }, [branchesByCity]);
+
+  const cityOptions = useMemo(() => {
+    return availableCities.map((city) => {
+      const branches = branchesByCity[city] || [];
+      const showtimeCount = branches.reduce((sum, branch) => sum + branch.showtimes.length, 0);
+      return {
+        city,
+        branchCount: branches.length,
+        showtimeCount,
+      };
+    });
+  }, [availableCities, branchesByCity]);
+
+  const filteredCityOptions = useMemo(() => {
+    const keyword = citySearch.trim().toLowerCase();
+    if (!keyword) return cityOptions;
+    return cityOptions.filter((option) => option.city.toLowerCase().includes(keyword));
+  }, [cityOptions, citySearch]);
+
+  const selectedCityMeta = cityOptions.find((option) => option.city === selectedCity);
+
+  useEffect(() => {
+    if (availableCities.length > 0) {
+      if (!selectedCity || !availableCities.includes(selectedCity)) {
+        setSelectedCity(availableCities[0]);
+      }
+    } else {
+      setSelectedCity("");
+    }
+  }, [availableCities, selectedCity]);
+
+  useEffect(() => {
+    setShowCityPicker(false);
+    setCitySearch("");
+  }, [selectedDate]);
 
   useEffect(() => {
     if (showtimesByBranch.length > 0) {
@@ -362,90 +407,174 @@ export default function MovieDetailPage() {
                   </h3>
 
                   <div className="space-y-6">
-                    {Object.keys(branchesByCity).map((city) => (
-                      <div key={city} className="mb-6">
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="bg-[#E50914]/10 text-[#E50914] border border-[#E50914]/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center">
-                            📍 {city}
+                    {/* Compact city selector for large multi-branch releases */}
+                    {availableCities.length > 0 && (
+                      <div className="relative mb-4 border-b border-[#333] pb-4">
+                        <button
+                          type="button"
+                          onClick={() => setShowCityPicker((value) => !value)}
+                          className="w-full md:w-auto min-w-full md:min-w-[360px] flex items-center justify-between gap-4 rounded-xl border border-[#3a3a3a] bg-[#171717] px-4 py-3 text-left hover:border-[#E50914]/70 transition-colors"
+                        >
+                          <span className="flex items-center gap-3 min-w-0">
+                            <span className="w-9 h-9 rounded-lg bg-[#E50914]/10 border border-[#E50914]/30 flex items-center justify-center shrink-0">
+                              <MapPin size={17} className="text-[#E50914]" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-[11px] uppercase tracking-wider font-black text-gray-500">
+                                Khu vực đang chọn
+                              </span>
+                              <span className="block text-white font-black truncate">
+                                {selectedCity || "Chọn tỉnh/thành"}
+                              </span>
+                            </span>
                           </span>
-                        </div>
-                        <div className="space-y-4">
-                          {branchesByCity[city].map((b) => {
-                            const isExpanded = expandedBranchIds[b.id];
-                            const grouped = getGroupedShowtimes(b.showtimes);
-                            return (
-                              <div key={b.id} className="bg-[#1a1a1a] rounded-xl border border-[#333] overflow-hidden transition-all duration-300">
-                                {/* Branch Header */}
-                                <button
-                                  type="button"
-                                  onClick={() => toggleBranch(b.id)}
-                                  className="w-full flex items-center justify-between p-4 hover:bg-[#222] transition-colors focus:outline-none text-left"
-                                >
-                                  <div>
-                                    <h4 className="text-base font-bold text-white flex items-center gap-2">
-                                      {b.name}
-                                    </h4>
-                                    {b.address && (
-                                      <p className="text-xs text-gray-400 mt-1 font-light">{b.address}</p>
-                                    )}
-                                  </div>
-                                  <span className="text-gray-400">
-                                    {isExpanded ? (
-                                      <span className="text-xs uppercase font-bold text-[#E50914]">Thu gọn ▲</span>
-                                    ) : (
-                                      <span className="text-xs uppercase font-bold text-gray-500">Mở rộng ▼</span>
-                                    )}
-                                  </span>
-                                </button>
+                          <span className="flex items-center gap-3 shrink-0">
+                            {selectedCityMeta && (
+                              <span className="hidden sm:block text-xs text-gray-400">
+                                {selectedCityMeta.branchCount} rạp · {selectedCityMeta.showtimeCount} suất
+                              </span>
+                            )}
+                            <ChevronDown
+                              size={18}
+                              className={`text-gray-500 transition-transform ${showCityPicker ? "rotate-180" : ""}`}
+                            />
+                          </span>
+                        </button>
 
-                                {/* Branch Content */}
-                                {isExpanded && (
-                                  <div className="p-4 border-t border-[#333] bg-[#111] space-y-4">
-                                    {Object.keys(grouped).map((groupKey) => (
-                                      <div key={groupKey} className="border-b border-[#222] pb-4 last:border-b-0 last:pb-0">
-                                        <h5 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-l-2 border-[#E50914] pl-2">
-                                          {groupKey}
-                                        </h5>
-                                        <div className="flex flex-wrap gap-3">
-                                          {grouped[groupKey].map((st) => (
-                                            <Link
-                                              key={st.id}
-                                              to={`/booking/${st.id}`}
-                                              className="px-4 py-2.5 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-sm hover:border-[#E50914] hover:bg-black transition flex flex-col items-center justify-center min-w-[90px] group"
-                                            >
-                                              <span className="text-base font-bold text-white group-hover:text-[#E50914]">
-                                                {new Date(
-                                                  (st.startTime ?? st.start_time ?? '').replace('Z', ''),
-                                                ).toLocaleTimeString("vi-VN", {
-                                                  hour: "2-digit",
-                                                  minute: "2-digit",
-                                                })}
-                                              </span>
-                                              <span className="text-[10px] text-gray-400 mt-0.5 font-medium">
-                                                {st.room?.name}
-                                              </span>
-                                              <span
-                                                className={`text-[9px] mt-0.5 font-bold tracking-wider ${
-                                                  st.available_seats < 10
-                                                    ? "text-red-500 animate-pulse"
-                                                    : "text-green-500/80"
-                                                }`}
-                                              >
-                                                {st.available_seats}/{st.room?.total_seats} ghế
-                                              </span>
-                                            </Link>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
+                        {showCityPicker && (
+                          <div className="absolute left-0 right-0 md:right-auto md:w-[520px] top-full mt-2 z-30 rounded-xl border border-[#333] bg-[#151515] shadow-2xl overflow-hidden">
+                            <div className="p-3 border-b border-[#2a2a2a]">
+                              <div className="flex items-center gap-2 rounded-lg border border-[#333] bg-[#0f0f0f] px-3 py-2">
+                                <Search size={15} className="text-gray-500 shrink-0" />
+                                <input
+                                  value={citySearch}
+                                  onChange={(e) => setCitySearch(e.target.value)}
+                                  placeholder="Tìm tỉnh/thành..."
+                                  className="w-full bg-transparent text-sm text-white placeholder:text-gray-600 outline-none"
+                                />
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+
+                            <div className="max-h-[320px] overflow-y-auto p-2">
+                              {filteredCityOptions.length > 0 ? (
+                                filteredCityOptions.map((option) => (
+                                  <button
+                                    key={option.city}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedCity(option.city);
+                                      setShowCityPicker(false);
+                                      setCitySearch("");
+                                    }}
+                                    className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition-colors ${
+                                      selectedCity === option.city
+                                        ? "bg-[#E50914] text-white"
+                                        : "text-gray-300 hover:bg-[#222]"
+                                    }`}
+                                  >
+                                    <span className="flex items-center gap-2 min-w-0">
+                                      <MapPin size={15} className="shrink-0" />
+                                      <span className="font-bold truncate">{option.city}</span>
+                                    </span>
+                                    <span className={`flex items-center gap-1 text-xs shrink-0 ${
+                                      selectedCity === option.city ? "text-white/80" : "text-gray-500"
+                                    }`}>
+                                      <Building2 size={13} /> {option.branchCount} · {option.showtimeCount} suất
+                                    </span>
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="px-3 py-8 text-center text-sm text-gray-500">
+                                  Không tìm thấy khu vực phù hợp.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    )}
+
+                    {selectedCity && branchesByCity[selectedCity] ? (
+                      <div className="space-y-4">
+                        {branchesByCity[selectedCity].map((b) => {
+                          const isExpanded = expandedBranchIds[b.id];
+                          const grouped = getGroupedShowtimes(b.showtimes);
+                          return (
+                            <div key={b.id} className="bg-[#1a1a1a] rounded-xl border border-[#333] overflow-hidden transition-all duration-300">
+                              {/* Branch Header */}
+                              <button
+                                type="button"
+                                onClick={() => toggleBranch(b.id)}
+                                className="w-full flex items-center justify-between p-4 hover:bg-[#222] transition-colors focus:outline-none text-left"
+                              >
+                                <div>
+                                  <h4 className="text-base font-bold text-white flex items-center gap-2">
+                                    {b.name}
+                                  </h4>
+                                  {b.address && (
+                                    <p className="text-xs text-gray-400 mt-1 font-light">{b.address}</p>
+                                  )}
+                                </div>
+                                <span className="text-gray-400">
+                                  {isExpanded ? (
+                                    <span className="text-xs uppercase font-bold text-[#E50914] flex items-center gap-1">Thu gọn <ChevronUp size={13} /></span>
+                                  ) : (
+                                    <span className="text-xs uppercase font-bold text-gray-500 flex items-center gap-1">Mở rộng <ChevronDown size={13} /></span>
+                                  )}
+                                </span>
+                              </button>
+
+                              {/* Branch Content */}
+                              {isExpanded && (
+                                <div className="p-4 border-t border-[#333] bg-[#111] space-y-4">
+                                  {Object.keys(grouped).map((groupKey) => (
+                                    <div key={groupKey} className="border-b border-[#222] pb-4 last:border-b-0 last:pb-0">
+                                      <h5 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 border-l-2 border-[#E50914] pl-2">
+                                        {groupKey}
+                                      </h5>
+                                      <div className="flex flex-wrap gap-3">
+                                        {grouped[groupKey].map((st) => (
+                                          <Link
+                                            key={st.id}
+                                            to={`/booking/${st.id}`}
+                                            className="px-4 py-2.5 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-sm hover:border-[#E50914] hover:bg-black transition flex flex-col items-center justify-center min-w-[90px] group"
+                                          >
+                                            <span className="text-base font-bold text-white group-hover:text-[#E50914]">
+                                              {new Date(
+                                                (st.startTime ?? st.start_time ?? '').replace('Z', ''),
+                                              ).toLocaleTimeString("vi-VN", {
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                              })}
+                                            </span>
+                                            <span className="text-[10px] text-gray-400 mt-0.5 font-medium">
+                                              {st.room?.name}
+                                            </span>
+                                            <span
+                                              className={`text-[9px] mt-0.5 font-bold tracking-wider ${
+                                                (st.availableSeats ?? st.available_seats ?? 0) < 10
+                                                  ? "text-red-500 animate-pulse"
+                                                  : "text-green-500/80"
+                                              }`}
+                                            >
+                                              {st.availableSeats ?? st.available_seats ?? 0}/{st.room?.totalSeats ?? st.room?.total_seats ?? 0} ghế
+                                            </span>
+                                          </Link>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-10 bg-[#1a1a1a] rounded-xl border border-dashed border-[#333] text-gray-500 font-medium">
+                        Không có lịch chiếu cho khu vực này.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import api from "../../utils/api";
 import MovieCard from "../../components/customer/MovieCard";
-import { useBranch } from "../../contexts/BranchContext";
 
 export default function MoviesListPage() {
   // Lấy tham số 'type' từ URL (ví dụ: 'now-showing' hoặc 'coming-soon')
@@ -10,7 +9,6 @@ export default function MoviesListPage() {
 
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { selectedBranchId } = useBranch();
 
   // Xác định status để gọi API và Tiêu đề trang
   const status = type === "coming-soon" ? "coming_soon" : "now_showing";
@@ -25,7 +23,6 @@ export default function MoviesListPage() {
         const res = await api.get("/public/movies", {
           params: {
             status,
-            ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
           },
         });
         setMovies(res.data?.data ?? res.data);
@@ -37,7 +34,7 @@ export default function MoviesListPage() {
     };
 
     fetchMovies();
-  }, [status, selectedBranchId]); // Load lại khi status thay đổi
+  }, [status]); // Load lại khi status thay đổi
 
   if (loading) {
     return (

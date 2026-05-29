@@ -17,6 +17,7 @@ router.get('/public/concessions', ConcessionController.index);
 router.get('/admin/concessions',      authenticate, authorize('admin'), ConcessionController.adminIndex);
 router.get('/admin/concessions/:id',  authenticate, authorize('admin'), ConcessionController.show);
 router.post('/admin/concessions',     authenticate, authorize('admin'), ConcessionController.store);
+router.put('/admin/concessions/:id/branches/:branchId/inventory', authenticate, authorize('admin'), ConcessionController.updateInventory);
 router.put('/admin/concessions/:id',  authenticate, authorize('admin'), ConcessionController.update);
 router.delete('/admin/concessions/:id', authenticate, authorize('admin'), ConcessionController.destroy);
 

@@ -14,7 +14,7 @@ import api from "../../utils/api";
 const formatCurrency = (amount) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(amount);
 
-export default function ConcessionStep({ selectedConcessions, onUpdateConcessions, onNext, onBack }) {
+export default function ConcessionStep({ selectedConcessions, onUpdateConcessions, onNext, onBack, branchId = null }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -22,7 +22,9 @@ export default function ConcessionStep({ selectedConcessions, onUpdateConcession
   useEffect(() => {
     const fetchConcessions = async () => {
       try {
-        const res = await api.get("/public/concessions");
+        const res = await api.get("/public/concessions", {
+          params: branchId ? { branch_id: branchId } : {},
+        });
         // API trả về array trực tiếp hoặc wrapped trong { value: [...] }
         const list = Array.isArray(res.data) ? res.data : (res.data.value ?? []);
         setItems(list);
@@ -33,7 +35,7 @@ export default function ConcessionStep({ selectedConcessions, onUpdateConcession
       }
     };
     fetchConcessions();
-  }, []);
+  }, [branchId]);
 
   const getQty = (id) => selectedConcessions.get(id)?.quantity ?? 0;
 

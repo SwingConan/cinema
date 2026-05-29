@@ -8,7 +8,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -40,6 +40,7 @@ import voiceBookingRoutes from './modules/voice-booking/voice-booking.routes.js'
 import securityRoutes    from './modules/security/security.routes.js';
 import auditRoutes       from './modules/audit/audit.routes.js';
 import branchRoutes      from './modules/branch/branch.routes.js';
+import staffDashRoutes   from './modules/staff/staff.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -71,7 +72,7 @@ const voiceLimiter = rateLimit({
   max: 10,                    // Tối đa 10 câu chat/phút/user
   message: { message: 'Bạn chat quá nhanh. Vui lòng đợi 1 phút.' },
   standardHeaders: true,
-  keyGenerator: (req) => `voice_${req.user?.id || req.ip}`,
+  keyGenerator: (req) => `voice_${req.user?.id || ipKeyGenerator(req.ip)}`,
 });
 
 // Rate Limiting: Chống spam đặt vé
@@ -155,6 +156,11 @@ app.use(`${API}/customer/movies/:movieId/reviews`, reviewRoutes);
 
 // Staff
 app.use(`${API}/staff/checkin`, checkinRoutes);
+
+// Staff Dashboard — Thống kê ca làm việc
+import { authenticate } from './middlewares/auth.middleware.js';
+import { authorize } from './middlewares/role.middleware.js';
+app.use(`${API}/staff`, authenticate, authorize('staff', 'admin'), staffDashRoutes);
 
 // Staff POS — Bán vé tại quầy
 app.use(`${API}/staff/pos`, bookingRoutes);

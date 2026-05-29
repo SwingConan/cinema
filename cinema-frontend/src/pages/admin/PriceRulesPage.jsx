@@ -24,27 +24,31 @@ const TIME_ICONS = { morning: Sun, afternoon: Sunset, evening: Moon, midnight: C
 
 const emptyRule = {
   name: "", roomType: null, dayType: null, timeSlot: null, seatType: null,
-  modifierType: "percentage", modifierValue: 0, priority: 0, isActive: true,
+  modifierType: "percentage", modifierValue: 0, priority: 0, isActive: true, branchId: null,
 };
 
 export default function PriceRulesPage() {
   const [rules, setRules] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...emptyRule });
   const [showForm, setShowForm] = useState(false);
   const [holidayForm, setHolidayForm] = useState({ date: "", name: "" });
   const [showHolidays, setShowHolidays] = useState(false);
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState("");
 
   const fetchData = async () => {
     try {
-      const [rulesRes, holidaysRes] = await Promise.all([
+      const [rulesRes, holidaysRes, branchesRes] = await Promise.all([
         api.get("/admin/price-rules"),
         api.get("/admin/holidays"),
+        api.get("/admin/branches"),
       ]);
       setRules(rulesRes.data);
       setHolidays(holidaysRes.data);
+      setBranches(Array.isArray(branchesRes.data) ? branchesRes.data : (branchesRes.data?.data ?? []));
     } catch (e) { toast.error("Lỗi tải dữ liệu"); }
     finally { setLoading(false); }
   };
@@ -102,6 +106,16 @@ export default function PriceRulesPage() {
     } catch (e) { toast.error("Lỗi xóa"); }
   };
 
+  const filteredRules = rules.filter(rule => {
+    if (selectedBranchFilter === "global") {
+      return !rule.branchId;
+    }
+    if (selectedBranchFilter) {
+      return Number(rule.branchId) === Number(selectedBranchFilter);
+    }
+    return true;
+  });
+
   if (loading) return <div className="text-center py-20 text-gray-400">Đang tải...</div>;
 
   return (
@@ -110,7 +124,7 @@ export default function PriceRulesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-white flex items-center gap-2">
-            <DollarSign className="text-[#E50914]" /> Dynamic Pricing Engine
+            <DollarSign className="text-[#E50914]" /> Quản lý giá linh hoạt
           </h1>
           <p className="text-gray-400 mt-1">Quản lý quy tắc giá linh hoạt theo ngày, khung giờ, loại phòng</p>
         </div>
@@ -135,6 +149,14 @@ export default function PriceRulesPage() {
                 className="w-full bg-[#2a2a2a] border border-[#444] rounded-lg px-3 py-2 text-white"
                 placeholder="VD: Cuối tuần +20%"
               />
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 mb-1 block">Chi nhánh áp dụng</label>
+              <select value={form.branchId ?? ""} onChange={e => setForm({...form, branchId: e.target.value ? Number(e.target.value) : null})}
+                className="w-full bg-[#2a2a2a] border border-[#444] rounded-lg px-3 py-2 text-white">
+                <option value="">Toàn hệ thống</option>
+                {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              </select>
             </div>
             {/* Filters */}
             <div>
@@ -204,6 +226,21 @@ export default function PriceRulesPage() {
         </div>
       )}
 
+      {/* Branch Filter */}
+      <div className="flex gap-4 mb-4">
+        <select
+          value={selectedBranchFilter}
+          onChange={(e) => setSelectedBranchFilter(e.target.value)}
+          className="bg-[#1a1a1a] border border-[#333] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[#E50914] w-full max-w-xs"
+        >
+          <option value="">Tất cả quy tắc</option>
+          <option value="global">Quy tắc toàn hệ thống</option>
+          {branches.map((b) => (
+            <option key={b.id} value={String(b.id)}>{b.name}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Rules Table */}
       <div className="bg-[#1a1a1a] border border-[#333] rounded-2xl overflow-hidden mb-6">
         <table className="w-full text-sm">
@@ -218,9 +255,14 @@ export default function PriceRulesPage() {
             </tr>
           </thead>
           <tbody>
-            {rules.map(rule => (
+            {filteredRules.map(rule => (
               <tr key={rule.id} className="border-t border-[#333] hover:bg-[#222] transition-colors">
-                <td className="px-4 py-3 text-white font-semibold">{rule.name}</td>
+                <td className="px-4 py-3">
+                  <div className="text-white font-semibold">{rule.name}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {rule.branchId ? (branches.find(b => b.id === rule.branchId)?.name || `Chi nhánh #${rule.branchId}`) : "Toàn hệ thống"}
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     {rule.roomType && <span className="px-2 py-0.5 bg-blue-900/30 text-blue-400 rounded text-xs">{rule.roomType}</span>}
@@ -259,7 +301,7 @@ export default function PriceRulesPage() {
                 </td>
               </tr>
             ))}
-            {rules.length === 0 && (
+            {filteredRules.length === 0 && (
               <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Chưa có quy tắc giá nào</td></tr>
             )}
           </tbody>

@@ -3,12 +3,17 @@
 // TRANG POS — Bán vé tại quầy cho Staff
 // =============================================
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
 import api from "../../utils/api";
 import socket, { joinShowtime, leaveShowtime } from "../../utils/socket";
 import SeatMap from "../../components/customer/SeatMap";
 import ConcessionStep from "../../components/booking/ConcessionStep";
-import { QRCodeSVG } from "qrcode.react";
+import {
+  buildPremiumTicketData,
+  PremiumTicketStyles,
+  TicketPaper,
+  printPremiumTicket,
+} from "../../components/staff/PremiumTicket";
 import {
   Monitor, Calendar, ChevronRight, CheckCircle2, ShoppingCart,
   Ticket, Coffee, X, Loader2, Mail, RotateCcw, ArrowLeft, Film, Clock,
@@ -25,9 +30,8 @@ function Toast({ msg, type, onClose }) {
     return () => clearTimeout(t);
   }, [onClose]);
   return (
-    <div className={`fixed top-5 right-5 z-[200] flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl border text-white font-bold text-sm animate-in slide-in-from-right-4 duration-300 ${
-      type === "success" ? "bg-green-900 border-green-700" : "bg-red-900 border-red-700"
-    }`}>
+    <div className={`fixed top-5 right-5 z-[200] flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl border text-white font-bold text-sm animate-in slide-in-from-right-4 duration-300 ${type === "success" ? "bg-green-900 border-green-700" : "bg-red-900 border-red-700"
+      }`}>
       {type === "success" ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : <X className="w-5 h-5 text-red-400" />}
       {msg}
       <button onClick={onClose} className="ml-2 opacity-60 hover:opacity-100"><X className="w-4 h-4" /></button>
@@ -36,7 +40,19 @@ function Toast({ msg, type, onClose }) {
 }
 
 export default function POSPage() {
-  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [branchInfo, setBranchInfo] = useState(null);
+
+  // Fetch chi nhánh của staff
+  useEffect(() => {
+    if (user?.branch_id) {
+      api.get('/public/branches').then(res => {
+        const list = Array.isArray(res.data) ? res.data : (res.data?.data ?? res.data?.value ?? []);
+        const myBranch = list.find(b => b.id === user.branch_id);
+        if (myBranch) setBranchInfo(myBranch);
+      }).catch(() => { });
+    }
+  }, [user]);
 
   // ── Bước chọn suất chiếu ─────────────────────────────────────────────────
   const [showtimes, setShowtimes] = useState([]);
@@ -202,7 +218,7 @@ export default function POSPage() {
     return selectedSeats.reduce((sum, s) => {
       const p = s.type === "vip" ? (st.priceVip ?? st.price_vip ?? 0)
         : s.type === "couple" ? (st.priceCouple ?? st.price_couple ?? 0)
-        : (st.priceRegular ?? st.price_regular ?? 0);
+          : (st.priceRegular ?? st.price_regular ?? 0);
       return sum + parseInt(p);
     }, 0);
   };
@@ -214,16 +230,16 @@ export default function POSPage() {
   const handlePOSCheckout = async () => {
     if (selectedSeats.length === 0) { showToast("Vui lòng chọn ít nhất 1 ghế.", "error"); return; }
     if (!paymentMethod) { showToast("Vui lòng chọn phương thức thanh toán.", "error"); return; }
-    
+
     setIsSubmitting(true);
     try {
       const concessionsPayload = Array.from(selectedConcessions.values()).map(({ item, quantity }) => ({
         id: item.id, quantity,
       }));
       const res = await api.post("/staff/pos/bookings", {
-        showtime_id:    parseInt(showtimeId),
-        seat_ids:       selectedSeats.map(s => s.id),
-        concessions:    concessionsPayload,
+        showtime_id: parseInt(showtimeId),
+        seat_ids: selectedSeats.map(s => s.id),
+        concessions: concessionsPayload,
         customer_email: customerEmail.trim() || null,
         payment_method: paymentMethod,
       });
@@ -318,7 +334,7 @@ export default function POSPage() {
   const fmtDate = (dateStr) => {
     const [y, m, d] = dateStr.split('-');
     const dt = new Date(+y, +m - 1, +d);
-    const todayDt = new Date(); todayDt.setHours(0,0,0,0);
+    const todayDt = new Date(); todayDt.setHours(0, 0, 0, 0);
     const tomorrowDt = new Date(todayDt); tomorrowDt.setDate(tomorrowDt.getDate() + 1);
     if (dt.toDateString() === todayDt.toDateString()) return 'Hôm nay';
     if (dt.toDateString() === tomorrowDt.toDateString()) return 'Ngày mai';
@@ -333,6 +349,14 @@ export default function POSPage() {
 
   // API base for poster images
   const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:8000';
+  const receiptTicket = lastBookingResult
+    ? buildPremiumTicketData({
+      booking: lastBookingResult,
+      branchInfo,
+      fallbackShowtime: showtimeData?.showtime,
+      paymentMethod: lastBookingResult.paymentMethod ?? paymentMethod,
+    })
+    : null;
 
   // ──────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -350,7 +374,9 @@ export default function POSPage() {
           </div>
           <div>
             <h1 className="text-lg font-black text-white">Bán vé tại quầy</h1>
-            <p className="text-xs text-gray-500">Point of Sale — Staff Interface</p>
+            <p className="text-xs text-gray-500">
+              {branchInfo ? `${branchInfo.name} · ${branchInfo.city}` : 'Point of Sale — Staff Interface'}
+            </p>
           </div>
         </div>
         {showtimeId && (
@@ -384,7 +410,7 @@ export default function POSPage() {
                       // auto-select today if available, else first available date
                       const dates = showtimes
                         .filter(st => (st.movieId ?? st.movie_id) === movie.id)
-                        .map(st => (st.startTime ?? st.start_time ?? '').toString().replace('Z','').slice(0,10));
+                        .map(st => (st.startTime ?? st.start_time ?? '').toString().replace('Z', '').slice(0, 10));
                       const uniqueDates = [...new Set(dates)].sort();
                       setSelectedDate(uniqueDates.includes(today) ? today : (uniqueDates[0] ?? today));
                     }}
@@ -396,7 +422,7 @@ export default function POSPage() {
                           src={`${API_BASE}/uploads/${movie.poster}`}
                           alt={movie.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          onError={e => { e.target.style.display='none'; }}
+                          onError={e => { e.target.style.display = 'none'; }}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
@@ -436,7 +462,7 @@ export default function POSPage() {
                     {movieInfo.poster && (
                       <img src={`${API_BASE}/uploads/${movieInfo.poster}`} alt={movieInfo.title}
                         className="w-12 h-16 object-cover rounded-lg flex-shrink-0"
-                        onError={e => { e.target.style.display='none'; }}
+                        onError={e => { e.target.style.display = 'none'; }}
                       />
                     )}
                     <div>
@@ -454,14 +480,13 @@ export default function POSPage() {
                   <button
                     key={date}
                     onClick={() => setSelectedDate(date)}
-                    className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                      selectedDate === date
+                    className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-bold transition-all ${selectedDate === date
                         ? 'bg-[#E50914] text-white shadow-lg shadow-red-900/40'
                         : 'bg-[#1a1a1a] text-gray-400 border border-[#2a2a2a] hover:border-[#E50914]/40 hover:text-white'
-                    }`}
+                      }`}
                   >
                     {fmtDate(date)}
-                    <span className="block text-[10px] font-normal opacity-70">{date.slice(5).replace('-','/')}</span>
+                    <span className="block text-[10px] font-normal opacity-70">{date.slice(5).replace('-', '/')}</span>
                   </button>
                 ))}
               </div>
@@ -490,7 +515,7 @@ export default function POSPage() {
                           const pct = totalSeats > 0 ? (booked / totalSeats) : 0;
                           const colorClass = pct >= 0.9 ? 'border-red-800/60 text-red-400' :
                             pct >= 0.6 ? 'border-amber-800/60 text-amber-400' :
-                            'border-[#333] text-gray-200 hover:border-[#E50914]/70 hover:text-white';
+                              'border-[#333] text-gray-200 hover:border-[#E50914]/70 hover:text-white';
                           return (
                             <button
                               key={st.id}
@@ -598,6 +623,7 @@ export default function POSPage() {
                       onUpdateConcessions={setSelectedConcessions}
                       onNext={() => setShowConcessions(false)}
                       onBack={() => setShowConcessions(false)}
+                      branchId={showtimeData?.showtime?.room?.branchId ?? user?.branch_id ?? null}
                     />
                   </div>
                 )}
@@ -648,11 +674,10 @@ export default function POSPage() {
               <button
                 onClick={() => setPosStep('confirming')}
                 disabled={selectedSeats.length === 0}
-                className={`w-full py-4 rounded-xl font-black text-lg uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                  selectedSeats.length === 0
+                className={`w-full py-4 rounded-xl font-black text-lg uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${selectedSeats.length === 0
                     ? "bg-[#222] text-gray-600 cursor-not-allowed"
                     : "bg-[#E50914] hover:bg-[#F40612] text-white shadow-lg hover:shadow-[0_0_20px_rgba(229,9,20,0.5)] active:scale-95"
-                }`}
+                  }`}
               >
                 <ChevronRight className="w-5 h-5" strokeWidth={3} />Tiếp tục thanh toán
               </button>
@@ -663,15 +688,15 @@ export default function POSPage() {
 
       {/* ── BƯỚC 3: Xác nhận & Thanh toán (Modal) ───────────────────────── */}
       {posStep === 'confirming' && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#141414] border border-[#333] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-start p-4 overflow-y-auto">
+          <div className="bg-[#141414] border border-[#333] rounded-2xl w-full max-w-2xl my-8 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between p-5 border-b border-[#222]">
               <h2 className="text-xl font-black text-white">Xác nhận đơn hàng</h2>
               <button onClick={() => setPosStep('selecting')} className="text-gray-500 hover:text-white transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
-            
+
             <div className="p-6">
               {/* Tóm tắt */}
               <div className="bg-[#1a1a1a] rounded-xl p-4 mb-6 border border-[#2a2a2a]">
@@ -680,12 +705,12 @@ export default function POSPage() {
                     <p className="text-sm text-gray-400 mb-1">Phim</p>
                     <p className="font-bold text-white text-lg">{showtimeData?.showtime?.movie?.title}</p>
                     <p className="text-sm text-gray-400 mt-1">
-                      {new Date((showtimeData?.showtime?.startTime ?? '').replace('Z','')).toLocaleString("vi-VN")}
+                      {new Date((showtimeData?.showtime?.startTime ?? '').replace('Z', '')).toLocaleString("vi-VN")}
                       {" · "}{showtimeData?.showtime?.room?.name}
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#2a2a2a]">
                   <div>
                     <p className="text-sm text-gray-400 mb-1">Ghế ({selectedSeats.length})</p>
@@ -709,22 +734,20 @@ export default function POSPage() {
               <div className="grid grid-cols-2 gap-4 mb-8">
                 <button
                   onClick={() => setPaymentMethod('cash')}
-                  className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
-                    paymentMethod === 'cash' 
-                      ? 'border-[#E50914] bg-[#E50914]/10 text-[#E50914]' 
+                  className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${paymentMethod === 'cash'
+                      ? 'border-[#E50914] bg-[#E50914]/10 text-[#E50914]'
                       : 'border-[#333] bg-[#1a1a1a] text-gray-300 hover:border-[#555]'
-                  }`}
+                    }`}
                 >
                   <Banknote className="w-6 h-6" />
                   <span className="font-bold">Tiền mặt</span>
                 </button>
                 <button
                   onClick={() => setPaymentMethod('card')}
-                  className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
-                    paymentMethod === 'card' 
-                      ? 'border-[#E50914] bg-[#E50914]/10 text-[#E50914]' 
+                  className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${paymentMethod === 'card'
+                      ? 'border-[#E50914] bg-[#E50914]/10 text-[#E50914]'
                       : 'border-[#333] bg-[#1a1a1a] text-gray-300 hover:border-[#555]'
-                  }`}
+                    }`}
                 >
                   <CreditCard className="w-6 h-6" />
                   <span className="font-bold">Thẻ / Chuyển khoản</span>
@@ -750,8 +773,8 @@ export default function POSPage() {
 
       {/* ── BƯỚC 3B: Chờ thanh toán chuyển khoản (VietQR) ─────────────── */}
       {posStep === 'paying' && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#141414] border border-[#333] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex justify-center items-start p-4 overflow-y-auto">
+          <div className="bg-[#141414] border border-[#333] rounded-2xl w-full max-w-lg my-8 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-[#222] text-center">
               <h2 className="text-xl font-black text-white">Chờ khách thanh toán</h2>
               <p className="text-sm text-gray-400 mt-1">Chuyển khoản / Quét mã QR</p>
@@ -806,108 +829,21 @@ export default function POSPage() {
 
       {/* ── BƯỚC 4: Hóa đơn (Biên lai) ────────────────────────────────────── */}
       {posStep === 'receipt' && lastBookingResult && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md animate-in slide-in-from-bottom-10 duration-300">
-            {/* Receipt Paper */}
-            <div className="bg-white text-black p-6 rounded-t-xl" id="pos-receipt">
-              <div className="text-center mb-6 border-b-2 border-black/10 pb-4 border-dashed">
-                <h2 className="text-2xl font-black mb-1">CINEMA TICKET</h2>
-                <p className="text-sm text-gray-600">Mã đơn: #{lastBookingResult.id}</p>
-                <p className="text-sm text-gray-600">{new Date().toLocaleString('vi-VN')}</p>
-              </div>
-
-              <div className="mb-4">
-                <p className="font-black text-xl leading-tight mb-2">
-                  {lastBookingResult.showtime?.movie?.title ?? showtimeData?.showtime?.movie?.title}
-                </p>
-                <p className="text-sm">Suất: <strong>
-                  {new Date(
-                    (lastBookingResult.showtime?.startTime ?? showtimeData?.showtime?.startTime ?? '').replace('Z','')
-                  ).toLocaleString("vi-VN")}
-                </strong></p>
-                <p className="text-sm">Phòng: <strong>
-                  {lastBookingResult.showtime?.room?.name ?? showtimeData?.showtime?.room?.name}
-                </strong></p>
-                {/* Ghế từ lastBookingResult.seats, KHÔNG dùng selectedSeats (đã bị clear sau fetchSeatMap) */}
-                <p className="text-sm mt-2">Ghế: <strong className="text-lg">
-                  {lastBookingResult.seats?.length > 0
-                    ? lastBookingResult.seats.map(s => `${s.row}${s.column}`).join(', ')
-                    : 'N/A'}
-                </strong></p>
-              </div>
-
-              {/* Bắp nước từ lastBookingResult.concessions */}
-              {lastBookingResult.concessions?.length > 0 && (
-                <div className="mb-4 py-2 border-y border-black/10">
-                  <p className="text-xs font-bold text-gray-500 uppercase mb-1">Bắp nước</p>
-                  {lastBookingResult.concessions.map(c => (
-                    <div key={c.concessionId ?? c.id} className="flex justify-between text-sm">
-                      <span>{c.quantity}x {c.name ?? c.concessionName}</span>
-                      <span>{formatCurrency((c.price ?? 0) * c.quantity)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Tổng tiền từ lastBookingResult (KHÔNG dùng grandTotal đã về 0) */}
-              <div className="flex justify-between items-end mt-4 mb-6">
-                <div>
-                  <p className="text-xs text-gray-500 uppercase">
-                    Thanh toán ({lastBookingResult.paymentMethod === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'})
-                  </p>
-                  <p className="text-xl font-black">
-                    {formatCurrency(lastBookingResult.totalAmount ?? lastBookingResult.total_amount ?? 0)}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="bg-black text-white px-2 py-1 text-xs font-bold uppercase rounded">Đã thanh toán</span>
-                </div>
-              </div>
-
-              {/* QR Code vào rạp */}
-              <div className="flex flex-col items-center justify-center pt-6 border-t-2 border-black/10 border-dashed">
-                <div className="bg-white p-2 border-4 border-black rounded-lg">
-                  <QRCodeSVG value={lastBookingResult.qrCode || `POS-${lastBookingResult.id}`} size={140} />
-                </div>
-                <p className="text-[10px] text-gray-500 mt-2 tracking-widest uppercase">Quét mã để vào rạp</p>
-              </div>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-center items-start p-4 overflow-y-auto">
+          <div className="w-full max-w-md my-8 animate-in slide-in-from-bottom-10 duration-300">
+            <PremiumTicketStyles />
+            <div className="bg-[#141414] border border-b-0 border-[#333] rounded-t-xl py-6 flex justify-center">
+              <TicketPaper ticket={receiptTicket} id="pos-receipt" />
             </div>
 
             {/* Actions */}
             <div className="bg-[#1a1a1a] p-4 rounded-b-xl border border-t-0 border-[#333] flex gap-3">
               <button
                 onClick={() => {
-                  const content = document.getElementById('pos-receipt').innerHTML;
-                  const printWin = window.open('', '_blank');
-                  // Kiểm tra popup blocker
-                  if (!printWin) {
+                  const opened = printPremiumTicket(receiptTicket, `Cinema Ticket #${lastBookingResult.id}`);
+                  if (!opened) {
                     showToast("Trình duyệt chặn popup. Vui lòng cho phép popup!", "error");
-                    return;
                   }
-                  printWin.document.write(
-                    '<html><head><title>Hoa Don #' + lastBookingResult.id + '</title>' +
-                    '<style>' +
-                    'body{font-family:sans-serif;padding:20px;width:300px;margin:0 auto;}' +
-                    '*{margin:0;padding:0;box-sizing:border-box;}' +
-                    'h2{font-size:20px;font-weight:900;}' +
-                    '.font-black{font-weight:900;}' +
-                    '.text-center{text-align:center;}' +
-                    '.mb-6{margin-bottom:24px;}' +
-                    '.mb-4{margin-bottom:16px;}' +
-                    '.mt-4{margin-top:16px;}' +
-                    '.flex{display:flex;}' +
-                    '.justify-between{justify-content:space-between;}' +
-                    '.border-dashed{border-bottom:2px dashed #ccc;padding-bottom:10px;margin-bottom:10px;}' +
-                    '.text-sm{font-size:13px;}' +
-                    '.text-xl{font-size:18px;}' +
-                    '.text-2xl{font-size:22px;}' +
-                    'img,svg{display:block;margin:0 auto;}' +
-                    '@media print{body{width:100%;padding:0;}}' +
-                    '</style></head><body>' + content +
-                    '<script>setTimeout(function(){window.print();window.close();},300);<\/script>' +
-                    '</body></html>'
-                  );
-                  printWin.document.close();
                 }}
                 className="flex-1 flex items-center justify-center gap-2 bg-[#333] hover:bg-[#444] text-white py-3 rounded-lg font-bold transition-colors"
               >

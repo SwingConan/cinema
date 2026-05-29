@@ -20,6 +20,8 @@ const mapRow = (r) => ({
   applicableDays: r.applicable_days,
   isActive:      Boolean(r.is_active),
   userId:        r.user_id ?? null,
+  branchId:      r.branch_id ?? null,
+  branchName:    r.branch_name ?? null,
   createdAt:     r.created_at,
   updatedAt:     r.updated_at,
   // Stats (nếu có join)
@@ -29,10 +31,11 @@ const mapRow = (r) => ({
 
 const findAll = async () => {
   const [rows] = await pool.query(
-    `SELECT v.*, COUNT(vu.id) AS used_count
+    `SELECT v.*, b.name AS branch_name, COUNT(vu.id) AS used_count
      FROM vouchers v
+     LEFT JOIN branches b ON b.id = v.branch_id
      LEFT JOIN voucher_usages vu ON vu.voucher_id = v.id
-     GROUP BY v.id
+     GROUP BY v.id, b.name
      ORDER BY v.created_at DESC`
   );
   return rows.map(mapRow);
@@ -50,14 +53,15 @@ const findByCode = async (code) => {
 
 const create = async (data) => {
   const [result] = await pool.query(
-    `INSERT INTO vouchers (code, name, description, discount_type, discount_value, max_discount, min_order, usage_limit, per_user_limit, valid_from, valid_to, applicable_days, is_active, user_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO vouchers (code, name, description, discount_type, discount_value, max_discount, min_order, usage_limit, per_user_limit, valid_from, valid_to, applicable_days, is_active, user_id, branch_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.code.toUpperCase(), data.name, data.description || null,
       data.discountType, data.discountValue, data.maxDiscount || null,
       data.minOrder || 0, data.usageLimit || null, data.perUserLimit ?? 1,
       data.validFrom, data.validTo, data.applicableDays || null, data.isActive ?? 1,
       data.userId || data.user_id || null,
+      data.branchId || data.branch_id || null,
     ]
   );
   return findById(result.insertId);
@@ -67,7 +71,7 @@ const update = async (id, data) => {
   await pool.query(
     `UPDATE vouchers SET code = ?, name = ?, description = ?, discount_type = ?, discount_value = ?,
      max_discount = ?, min_order = ?, usage_limit = ?, per_user_limit = ?,
-     valid_from = ?, valid_to = ?, applicable_days = ?, is_active = ?, user_id = ?
+     valid_from = ?, valid_to = ?, applicable_days = ?, is_active = ?, user_id = ?, branch_id = ?
      WHERE id = ?`,
     [
       data.code.toUpperCase(), data.name, data.description || null,
@@ -75,6 +79,7 @@ const update = async (id, data) => {
       data.minOrder || 0, data.usageLimit || null, data.perUserLimit ?? 1,
       data.validFrom, data.validTo, data.applicableDays || null, data.isActive ?? 1,
       data.userId || data.user_id || null,
+      data.branchId || data.branch_id || null,
       id,
     ]
   );

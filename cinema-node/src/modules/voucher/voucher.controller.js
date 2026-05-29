@@ -53,11 +53,12 @@ const myVouchers = async (req, res, next) => {
 
 const validate = async (req, res, next) => {
   try {
-    const { code, orderAmount } = req.body;
+    const { code, orderAmount, branchId, branch_id } = req.body;
     if (!code) throw Object.assign(new Error('Vui lòng nhập mã giảm giá.'), { status: 422 });
     const result = await VoucherService.validateVoucher(code, {
       userId: req.user.id,
       orderAmount: Number(orderAmount) || 0,
+      branchId: branchId || branch_id || null,
     });
     res.json(result);
   } catch (err) { next(err); }

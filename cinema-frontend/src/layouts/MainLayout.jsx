@@ -1,6 +1,6 @@
 import { Outlet, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { LogOut, User as UserIcon, ChevronDown, Ticket, MapPin } from "lucide-react";
+import { LogOut, User as UserIcon, ChevronDown, Ticket, MapPin, Monitor } from "lucide-react";
 import Footer from "../components/Footer";
 import NotificationBell from "../components/customer/NotificationBell";
 import VoiceBookingAssistant from "../components/customer/VoiceBookingAssistant";
@@ -25,21 +25,6 @@ export default function MainLayout() {
                 </Link>
               </div>
 
-              <div className="hidden md:flex items-center gap-2 rounded-lg border border-[#333] bg-[#111] px-3 py-2">
-                <MapPin className="h-4 w-4 text-[#E50914]" />
-                <select
-                  value={selectedBranchId || ""}
-                  onChange={(e) => changeBranch(e.target.value)}
-                  disabled={loadingBranches || branches.length === 0}
-                  className="bg-transparent text-gray-200 text-sm font-bold outline-none max-w-[220px]"
-                >
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id} className="bg-[#111] text-white">
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
 
               {/* MENU CHÍNH */}
               <div className="hidden sm:flex sm:items-center sm:space-x-8">
@@ -104,20 +89,12 @@ export default function MainLayout() {
                     </Link>
                   )}
                   {user.role === "staff" && (
-                    <div className="flex items-center space-x-4">
-                      <Link
-                        to="/staff"
-                        className="text-sm font-medium text-green-400 hover:text-green-300"
-                      >
-                        Soát Vé
-                      </Link>
-                      <Link
-                        to="/staff/pos"
-                        className="text-sm font-medium text-amber-400 hover:text-amber-300"
-                      >
-                        POS Bán Vé
-                      </Link>
-                    </div>
+                    <Link
+                      to="/staff"
+                      className="text-sm font-medium text-green-400 hover:text-green-300 flex items-center gap-1.5"
+                    >
+                      <Monitor className="w-4 h-4" /> Staff Panel
+                    </Link>
                   )}
                   <button
                     onClick={() => {

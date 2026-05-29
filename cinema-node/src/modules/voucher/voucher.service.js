@@ -45,7 +45,7 @@ const remove = async (id) => {
 
 // ── VALIDATE VOUCHER (Dùng bởi Customer trước khi thanh toán) ───────────
 // Trả về { valid, discountAmount, voucher } hoặc throw error
-const validateVoucher = async (code, { userId, orderAmount }) => {
+const validateVoucher = async (code, { userId, orderAmount, branchId = null }) => {
   const voucher = await VoucherRepository.findByCode(code);
 
   // 1. Tồn tại?
@@ -64,6 +64,10 @@ const validateVoucher = async (code, { userId, orderAmount }) => {
   }
 
   // 3. Trong thời hạn?
+  if (voucher.branchId && Number(voucher.branchId) !== Number(branchId)) {
+    throw Object.assign(new Error('Ma giam gia nay khong ap dung tai chi nhanh da chon.'), { status: 422 });
+  }
+
   const now = new Date();
   if (now < new Date(voucher.validFrom) || now > new Date(voucher.validTo)) {
     throw Object.assign(new Error('Mã giảm giá đã hết hạn hoặc chưa đến thời gian sử dụng.'), { status: 422 });
@@ -125,6 +129,7 @@ const validateVoucher = async (code, { userId, orderAmount }) => {
       discountValue: voucher.discountValue,
       maxDiscount:  voucher.maxDiscount,
       userId:       voucher.userId,
+      branchId:     voucher.branchId,
     },
   };
 };

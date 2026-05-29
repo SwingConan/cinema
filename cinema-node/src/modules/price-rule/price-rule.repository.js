@@ -7,6 +7,8 @@ import pool from '../../config/database.js';
 
 const mapRow = (r) => ({
   id:            r.id,
+  branchId:      r.branch_id ?? null,
+  branchName:    r.branch_name ?? null,
   name:          r.name,
   roomType:      r.room_type,
   dayType:       r.day_type,
@@ -23,7 +25,12 @@ const mapRow = (r) => ({
 // ── PRICE RULES ─────────────────────────────────────────────────────────
 
 const findAll = async () => {
-  const [rows] = await pool.query('SELECT * FROM price_rules ORDER BY priority DESC, id ASC');
+  const [rows] = await pool.query(
+    `SELECT pr.*, b.name AS branch_name
+     FROM price_rules pr
+     LEFT JOIN branches b ON b.id = pr.branch_id
+     ORDER BY pr.priority DESC, pr.id ASC`
+  );
   return rows.map(mapRow);
 };
 
@@ -39,22 +46,22 @@ const findById = async (id) => {
   return rows.length ? mapRow(rows[0]) : null;
 };
 
-const create = async ({ name, roomType, dayType, timeSlot, seatType, modifierType, modifierValue, priority, isActive }) => {
+const create = async ({ name, branchId, branch_id, roomType, dayType, timeSlot, seatType, modifierType, modifierValue, priority, isActive }) => {
   const [result] = await pool.query(
-    `INSERT INTO price_rules (name, room_type, day_type, time_slot, seat_type, modifier_type, modifier_value, priority, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [name, roomType || null, dayType || null, timeSlot || null, seatType || null, modifierType, modifierValue, priority ?? 0, isActive ?? 1]
+    `INSERT INTO price_rules (branch_id, name, room_type, day_type, time_slot, seat_type, modifier_type, modifier_value, priority, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [branchId || branch_id || null, name, roomType || null, dayType || null, timeSlot || null, seatType || null, modifierType, modifierValue, priority ?? 0, isActive ?? 1]
   );
   return findById(result.insertId);
 };
 
-const update = async (id, { name, roomType, dayType, timeSlot, seatType, modifierType, modifierValue, priority, isActive }) => {
+const update = async (id, { name, branchId, branch_id, roomType, dayType, timeSlot, seatType, modifierType, modifierValue, priority, isActive }) => {
   await pool.query(
     `UPDATE price_rules
-     SET name = ?, room_type = ?, day_type = ?, time_slot = ?, seat_type = ?,
+     SET branch_id = ?, name = ?, room_type = ?, day_type = ?, time_slot = ?, seat_type = ?,
          modifier_type = ?, modifier_value = ?, priority = ?, is_active = ?
      WHERE id = ?`,
-    [name, roomType || null, dayType || null, timeSlot || null, seatType || null, modifierType, modifierValue, priority ?? 0, isActive ?? 1, id]
+    [branchId || branch_id || null, name, roomType || null, dayType || null, timeSlot || null, seatType || null, modifierType, modifierValue, priority ?? 0, isActive ?? 1, id]
   );
   return findById(id);
 };
@@ -87,7 +94,7 @@ const removeHoliday = async (id) => {
 
 // ── DYNAMIC PRICE CALCULATION ───────────────────────────────────────────
 // Tính giá thực tế cho 1 ghế, áp dụng tất cả matching rules
-const calculateDynamicPrice = async (basePrice, { roomType, startTime, seatType }) => {
+const calculateDynamicPrice = async (basePrice, { roomType, startTime, seatType, branchId = null }) => {
   const dt = new Date(startTime);
   const hour = dt.getHours();
   const dayOfWeek = dt.getDay(); // 0=Sun, 6=Sat
@@ -115,8 +122,9 @@ const calculateDynamicPrice = async (basePrice, { roomType, startTime, seatType 
        AND (day_type  IS NULL OR day_type  = ?)
        AND (time_slot IS NULL OR time_slot = ?)
        AND (seat_type IS NULL OR seat_type = ?)
-     ORDER BY priority DESC`,
-    [roomType, dayType, timeSlot, seatType]
+       AND (branch_id IS NULL OR branch_id = ?)
+     ORDER BY CASE WHEN branch_id IS NULL THEN 0 ELSE 1 END DESC, priority DESC`,
+    [roomType, dayType, timeSlot, seatType, branchId]
   );
 
   let finalPrice = basePrice;

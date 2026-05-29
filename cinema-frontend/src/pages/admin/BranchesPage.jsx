@@ -5,6 +5,43 @@ import { Building2, Plus, Save, Trash2, X } from "lucide-react";
 
 const emptyForm = { name: "", address: "", city: "", phone: "", email: "", status: "active" };
 
+const STANDARD_34_PROVINCES = [
+  "An Giang",
+  "Bắc Ninh",
+  "Cà Mau",
+  "Cần Thơ",
+  "Cao Bằng",
+  "Đà Nẵng",
+  "Đắk Lắk",
+  "Điện Biên",
+  "Đồng Nai",
+  "Đồng Tháp",
+  "Gia Lai",
+  "Hà Nội",
+  "Hà Tĩnh",
+  "Hải Phòng",
+  "Hồ Chí Minh",
+  "Hưng Yên",
+  "Khánh Hòa",
+  "Lai Châu",
+  "Lâm Đồng",
+  "Lạng Sơn",
+  "Lào Cai",
+  "Nghệ An",
+  "Ninh Bình",
+  "Phú Thọ",
+  "Quảng Ngãi",
+  "Quảng Ninh",
+  "Quảng Trị",
+  "Sơn La",
+  "Tây Ninh",
+  "Thái Nguyên",
+  "Thanh Hóa",
+  "Huế",
+  "Tuyên Quang",
+  "Vĩnh Long"
+].sort((a, b) => a.localeCompare(b, "vi"));
+
 export default function BranchesPage() {
   const [branches, setBranches] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -89,7 +126,6 @@ export default function BranchesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               ["name", "Tên chi nhánh"],
-              ["city", "Thành phố"],
               ["address", "Địa chỉ"],
               ["phone", "Số điện thoại"],
               ["email", "Email"],
@@ -99,11 +135,29 @@ export default function BranchesPage() {
                 <input
                   value={form[key]}
                   onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))}
-                  required={["name", "city", "address"].includes(key)}
+                  required={["name", "address"].includes(key)}
                   className="w-full rounded-xl border border-[#333] bg-[#111] px-4 py-2.5 text-white outline-none focus:border-[#E50914]"
                 />
               </label>
             ))}
+
+            <label>
+              <span className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1.5">Thành phố (Tỉnh) *</span>
+              <select
+                value={form.city}
+                onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))}
+                required
+                className="w-full rounded-xl border border-[#333] bg-[#111] px-4 py-2.5 text-white outline-none focus:border-[#E50914]"
+              >
+                <option value="" disabled>-- Chọn Thành phố (Tỉnh) --</option>
+                {STANDARD_34_PROVINCES.map((prov) => (
+                  <option key={prov} value={prov}>
+                    {prov}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <label>
               <span className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1.5">Trạng thái</span>
               <select

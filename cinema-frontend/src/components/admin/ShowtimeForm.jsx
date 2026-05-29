@@ -5,6 +5,7 @@ export default function ShowtimeForm({
   showtime,
   movies,
   rooms,
+  branches = [],
   onSuccess,
   onCancel,
 }) {
@@ -30,15 +31,26 @@ export default function ShowtimeForm({
     price_vip: "",
     price_couple: "",
   });
+  const [selectedBranchId, setSelectedBranchId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const filteredRooms = rooms.filter((r) => {
+    if (!selectedBranchId) return true;
+    return String(r.branchId ?? r.branch_id ?? "") === String(selectedBranchId);
+  });
+
   useEffect(() => {
     if (showtime) {
+      const currentRoomId = showtime.roomId ?? showtime.room_id ?? "";
+      const currentRoom = rooms.find((r) => String(r.id) === String(currentRoomId));
+      if (currentRoom) {
+        setSelectedBranchId(currentRoom.branchId ?? currentRoom.branch_id ?? "");
+      }
       setFormData({
         // Hỗ trợ cả camelCase (Node.js) và snake_case khi cần populate form
         movie_id:     showtime.movieId     ?? showtime.movie_id    ?? '',
-        room_id:      showtime.roomId      ?? showtime.room_id     ?? '',
+        room_id:      currentRoomId,
         start_time:   formatDateTimeForInput(showtime.startTime ?? showtime.start_time) || '',
         format:       showtime.format      || 'Phụ đề',
         price_regular: showtime.priceRegular ?? showtime.price_regular ?? '',
@@ -47,10 +59,26 @@ export default function ShowtimeForm({
       });
     } else {
       // Set defaults if creating new
-      if (movies.length > 0 && rooms.length > 0) {
+      if (branches.length > 0) {
+        const defaultBranchId = branches[0].id;
+        setSelectedBranchId(defaultBranchId);
+        
+        const branchRooms = rooms.filter(
+          (r) => String(r.branchId ?? r.branch_id ?? "") === String(defaultBranchId)
+        );
+        
         setFormData((prev) => ({
           ...prev,
-          movie_id: movies[0].id,
+          movie_id: movies.length > 0 ? movies[0].id : "",
+          room_id: branchRooms.length > 0 ? branchRooms[0].id : "",
+          price_regular: 60000,
+          price_vip: 80000,
+          price_couple: 150000,
+        }));
+      } else if (rooms.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          movie_id: movies.length > 0 ? movies[0].id : "",
           room_id: rooms[0].id,
           price_regular: 60000,
           price_vip: 80000,
@@ -58,7 +86,20 @@ export default function ShowtimeForm({
         }));
       }
     }
-  }, [showtime, movies, rooms]);
+  }, [showtime, movies, rooms, branches]);
+
+  const handleBranchChange = (e) => {
+    const branchId = e.target.value;
+    setSelectedBranchId(branchId);
+    
+    const branchRooms = rooms.filter(
+      (r) => String(r.branchId ?? r.branch_id ?? "") === String(branchId)
+    );
+    setFormData((prev) => ({
+      ...prev,
+      room_id: branchRooms.length > 0 ? branchRooms[0].id : "",
+    }));
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -141,6 +182,28 @@ export default function ShowtimeForm({
 
         <div>
           <label className="block text-sm font-bold text-gray-400 mb-2 uppercase tracking-wider">
+            Chọn Chi nhánh *
+          </label>
+          <select
+            name="branch_id"
+            required
+            value={selectedBranchId}
+            onChange={handleBranchChange}
+            className="mt-1 block w-full bg-[#222] text-white border border-[#444] rounded-lg shadow-sm py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-[#E50914] focus:border-[#E50914] transition-colors"
+          >
+            <option value="" disabled>
+              -- Chọn chi nhánh --
+            </option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-bold text-gray-400 mb-2 uppercase tracking-wider">
             Chọn Phòng *
           </label>
           <select
@@ -153,13 +216,14 @@ export default function ShowtimeForm({
             <option value="" disabled>
               -- Chọn phòng --
             </option>
-            {rooms.map((r) => (
+            {filteredRooms.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name} ({r.branch?.name || "Chưa phân bổ"}) (Sức chứa: {r.totalSeats ?? r.total_seats})
+                {r.name} (Sức chứa: {r.totalSeats ?? r.total_seats} ghế)
               </option>
             ))}
           </select>
         </div>
+
         <div>
           <label className="block text-sm font-bold text-gray-400 mb-2 uppercase tracking-wider">
             Định dạng (Ngôn ngữ) *

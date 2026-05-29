@@ -21,7 +21,7 @@ const mapUser = (r) => ({
  * Lấy danh sách user (mới nhất trước), giới hạn 200
  * Có hỗ trợ lọc theo role và tìm kiếm theo name/email
  */
-const findAll = async ({ search = '', role = '', page = 1, perPage = 50 } = {}) => {
+const findAll = async ({ search = '', role = '', branchId = '', page = 1, perPage = 50 } = {}) => {
   const offset = (page - 1) * perPage;
   const params = [];
   const conditions = [];
@@ -33,6 +33,10 @@ const findAll = async ({ search = '', role = '', page = 1, perPage = 50 } = {}) 
   if (role) {
     conditions.push('u.role = ?');
     params.push(role);
+  }
+  if (branchId) {
+    conditions.push('u.branch_id = ?');
+    params.push(branchId);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

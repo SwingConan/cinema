@@ -32,6 +32,7 @@ export default function BookingPage() {
   const [step, setStep] = useState(1);
   // Map<concessionId, { item, quantity }>
   const [selectedConcessions, setSelectedConcessions] = useState(new Map());
+  const branchId = data?.showtime?.branchId || data?.showtime?.branch_id || data?.showtime?.room?.branchId || data?.showtime?.room?.branch?.id || null;
 
   // ── STATE CHO VIETQR PAYMENT MODAL ───────────────────────────
   // Khi null: ẩn modal. Khi có data: hiển thị QR + chờ payment:success
@@ -283,6 +284,7 @@ export default function BookingPage() {
       const res = await api.post("/customer/vouchers/validate", {
         code: normalizedCode,
         orderAmount: calculateTotal(),
+        branchId,
       });
       setVoucherCode(normalizedCode);
       setVoucherValidation(res.data);
@@ -550,6 +552,7 @@ export default function BookingPage() {
               onUpdateConcessions={setSelectedConcessions}
               onNext={() => setStep(3)}
               onBack={() => setStep(1)}
+              branchId={branchId}
             />
           </div>
         )}
@@ -570,6 +573,7 @@ export default function BookingPage() {
                   onUpdateConcessions={setSelectedConcessions}
                   onNext={() => setStep(3)}
                   onBack={() => setStep(1)}
+                  branchId={branchId}
                 />
               </div>
             ) : (

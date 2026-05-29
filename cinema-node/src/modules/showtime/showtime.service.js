@@ -11,10 +11,11 @@ const getById = async (id) => {
 
   // ── Dynamic Pricing: tính giá thực tế cho từng loại ghế ──────────────
   const roomType = s.room?.type || '2D';
+  const branchId = s.room?.branchId || s.room?.branch_id || s.room?.branch?.id || null;
   const [regPrice, vipPrice, copPrice] = await Promise.all([
-    PriceRuleRepository.calculateDynamicPrice(Number(s.priceRegular), { roomType, startTime: s.startTime, seatType: 'regular' }),
-    PriceRuleRepository.calculateDynamicPrice(Number(s.priceVip),     { roomType, startTime: s.startTime, seatType: 'vip' }),
-    PriceRuleRepository.calculateDynamicPrice(Number(s.priceCouple),  { roomType, startTime: s.startTime, seatType: 'couple' }),
+    PriceRuleRepository.calculateDynamicPrice(Number(s.priceRegular), { roomType, startTime: s.startTime, seatType: 'regular', branchId }),
+    PriceRuleRepository.calculateDynamicPrice(Number(s.priceVip),     { roomType, startTime: s.startTime, seatType: 'vip', branchId }),
+    PriceRuleRepository.calculateDynamicPrice(Number(s.priceCouple),  { roomType, startTime: s.startTime, seatType: 'couple', branchId }),
   ]);
 
   s.priceRegular = regPrice.finalPrice;

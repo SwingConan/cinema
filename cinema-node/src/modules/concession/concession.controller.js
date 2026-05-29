@@ -1,26 +1,32 @@
 // src/modules/concession/concession.controller.js
-// =============================================
-// CONCESSION CONTROLLER
-// =============================================
 import { ConcessionService } from './concession.service.js';
 
-// GET /api/public/concessions  (User/Staff — chỉ active)
+const parseBranchId = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
 const index = async (req, res, next) => {
   try {
-    const items = await ConcessionService.getAll({ adminView: false });
+    const items = await ConcessionService.getAll({
+      adminView: false,
+      branchId: parseBranchId(req.query.branch_id || req.query.branchId),
+    });
     res.json(items);
   } catch (err) { next(err); }
 };
 
-// GET /api/admin/concessions  (Admin — toàn bộ)
 const adminIndex = async (req, res, next) => {
   try {
-    const items = await ConcessionService.getAll({ adminView: true });
+    const items = await ConcessionService.getAll({
+      adminView: true,
+      branchId: parseBranchId(req.query.branch_id || req.query.branchId),
+    });
     res.json(items);
   } catch (err) { next(err); }
 };
 
-// GET /api/admin/concessions/:id
 const show = async (req, res, next) => {
   try {
     const item = await ConcessionService.getById(Number(req.params.id));
@@ -28,7 +34,6 @@ const show = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// POST /api/admin/concessions
 const store = async (req, res, next) => {
   try {
     const item = await ConcessionService.create(req.body);
@@ -36,7 +41,6 @@ const store = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// PUT /api/admin/concessions/:id
 const update = async (req, res, next) => {
   try {
     const item = await ConcessionService.update(Number(req.params.id), req.body);
@@ -44,7 +48,17 @@ const update = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// DELETE /api/admin/concessions/:id
+const updateInventory = async (req, res, next) => {
+  try {
+    const item = await ConcessionService.updateBranchInventory(
+      Number(req.params.id),
+      Number(req.params.branchId),
+      req.body
+    );
+    res.json(item);
+  } catch (err) { next(err); }
+};
+
 const destroy = async (req, res, next) => {
   try {
     await ConcessionService.remove(Number(req.params.id));
@@ -52,4 +66,12 @@ const destroy = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-export const ConcessionController = { index, adminIndex, show, store, update, destroy };
+export const ConcessionController = {
+  index,
+  adminIndex,
+  show,
+  store,
+  update,
+  updateInventory,
+  destroy,
+};
