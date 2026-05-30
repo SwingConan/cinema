@@ -3,22 +3,22 @@ import api from "../../utils/api";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   Search, Shield, UserCheck, UserX, ChevronDown,
-  Users, RefreshCw, Lock, Unlock,
+  Users, RefreshCw, Lock, Unlock, Plus, X,
+  Mail, User, Phone, Eye, EyeOff, Building2,
+  UserPlus, KeyRound,
 } from "lucide-react";
 
 // ─────────── Helpers ────────────────────────────────────────────────
-const ROLES = ["", "admin", "staff", "customer"];
-
 const roleMeta = {
   admin:    { label: "Admin",    bg: "bg-red-900/30",    text: "text-red-400",    border: "border-red-800/50"    },
-  staff:    { label: "Staff",    bg: "bg-blue-900/30",   text: "text-blue-400",   border: "border-blue-800/50"   },
-  customer: { label: "Customer", bg: "bg-gray-800/60",   text: "text-gray-400",   border: "border-gray-700/50"   },
+  staff:    { label: "Nhân viên", bg: "bg-blue-900/30",  text: "text-blue-400",   border: "border-blue-800/50"   },
+  customer: { label: "Khách hàng", bg: "bg-gray-800/60", text: "text-gray-400",   border: "border-gray-700/50"   },
 };
 
 const RoleBadge = ({ role }) => {
   const m = roleMeta[role] ?? roleMeta.customer;
   return (
-    <span className={`px-2.5 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${m.bg} ${m.text} ${m.border}`}>
+    <span className={`px-2.5 py-1 text-[10px] font-black rounded-full border uppercase tracking-widest ${m.bg} ${m.text} ${m.border}`}>
       {m.label}
     </span>
   );
@@ -26,6 +26,148 @@ const RoleBadge = ({ role }) => {
 
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+
+// ─────────── Create Staff Modal ──────────────────────────────────────
+function CreateStaffModal({ branches, onClose, onCreated }) {
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", branchId: "" });
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleChange = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!form.name.trim() || form.name.trim().length < 2) return setError("Họ tên phải có ít nhất 2 ký tự.");
+    if (!form.email.trim()) return setError("Vui lòng nhập email.");
+    if (!form.password || form.password.length < 8) return setError("Mật khẩu phải có ít nhất 8 ký tự.");
+    if (!form.branchId) return setError("Vui lòng chọn chi nhánh.");
+
+    setLoading(true);
+    try {
+      const res = await api.post("/admin/users/create-staff", {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim() || null,
+        password: form.password,
+        branch_id: form.branchId,
+      });
+      onCreated(res.data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Tạo tài khoản thất bại.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-[#1a1a1a] border border-[#333] rounded-2xl shadow-2xl w-full max-w-lg mx-4" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a2a2a]">
+          <h3 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-[#E50914]" />
+            Thêm nhân viên mới
+          </h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#333] text-gray-500 hover:text-white transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-900/20 border border-red-800/50 text-red-400 text-sm font-medium px-4 py-3 rounded-xl">
+              {error}
+            </div>
+          )}
+
+          {/* Họ và tên */}
+          <div>
+            <label className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1.5 block">Họ và tên *</label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
+              <input type="text" value={form.name} onChange={e => handleChange("name", e.target.value)}
+                placeholder="Nguyễn Văn A"
+                className="w-full pl-10 pr-4 py-2.5 bg-[#111] border border-[#333] text-white rounded-xl text-sm outline-none focus:border-[#E50914] transition-colors placeholder:text-gray-700" />
+            </div>
+          </div>
+
+          {/* Email */}
+          <div>
+            <label className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1.5 block">Email *</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
+              <input type="email" value={form.email} onChange={e => handleChange("email", e.target.value)}
+                placeholder="nhanvien@cinema.com"
+                className="w-full pl-10 pr-4 py-2.5 bg-[#111] border border-[#333] text-white rounded-xl text-sm outline-none focus:border-[#E50914] transition-colors placeholder:text-gray-700" />
+            </div>
+          </div>
+
+          {/* Số điện thoại */}
+          <div>
+            <label className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1.5 block">Số điện thoại</label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
+              <input type="text" value={form.phone} onChange={e => handleChange("phone", e.target.value)}
+                placeholder="0901234567 (tùy chọn)"
+                className="w-full pl-10 pr-4 py-2.5 bg-[#111] border border-[#333] text-white rounded-xl text-sm outline-none focus:border-[#E50914] transition-colors placeholder:text-gray-700" />
+            </div>
+          </div>
+
+          {/* Mật khẩu */}
+          <div>
+            <label className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1.5 block">Mật khẩu tạm *</label>
+            <div className="relative">
+              <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
+              <input type={showPass ? "text" : "password"} value={form.password}
+                onChange={e => handleChange("password", e.target.value)}
+                placeholder="Tối thiểu 8 ký tự"
+                className="w-full pl-10 pr-10 py-2.5 bg-[#111] border border-[#333] text-white rounded-xl text-sm outline-none focus:border-[#E50914] transition-colors placeholder:text-gray-700" />
+              <button type="button" onClick={() => setShowPass(!showPass)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
+                {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <p className="text-gray-700 text-[10px] mt-1.5 italic">⚠ Hãy giao mật khẩu tạm cho nhân viên và yêu cầu đổi lại sau.</p>
+          </div>
+
+          {/* Chi nhánh */}
+          <div>
+            <label className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1.5 block">Chi nhánh *</label>
+            <div className="relative">
+              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4" />
+              <select value={form.branchId} onChange={e => handleChange("branchId", e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-[#111] border border-[#333] text-white rounded-xl text-sm outline-none focus:border-[#E50914] transition-colors appearance-none">
+                <option value="">Chọn chi nhánh</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 w-4 h-4 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border border-[#333] text-gray-400 hover:text-white hover:border-[#555] text-sm font-bold transition-colors">
+              Hủy
+            </button>
+            <button type="submit" disabled={loading}
+              className="px-5 py-2.5 rounded-xl bg-[#E50914] hover:bg-[#F40612] text-white text-sm font-black uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center gap-2">
+              {loading ? (
+                <><RefreshCw size={14} className="animate-spin" /> Đang tạo...</>
+              ) : (
+                <><UserPlus size={14} /> Tạo tài khoản</>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 
 // ─────────── Main Component ─────────────────────────────────────────
 export default function ManageUsers() {
@@ -35,18 +177,20 @@ export default function ManageUsers() {
   const [total,    setTotal]    = useState(0);
   const [loading,  setLoading]  = useState(true);
   const [search,   setSearch]   = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [page,     setPage]     = useState(1);
-  const [toast,    setToast]    = useState(null); // { type: 'success'|'error', msg }
+  const [toast,    setToast]    = useState(null);
   const [branches, setBranches] = useState([]);
 
-  // Dropdown state: { userId, open }
-  const [openDropdown, setOpenDropdown] = useState(null);
+  // Tab: "staff" or "customer"
+  const [activeTab, setActiveTab] = useState("staff");
+
+  // Modals
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const PER_PAGE = 20;
 
-  const showToast = (type, msg) => {
+  const showToastMsg = (type, msg) => {
     setToast({ type, msg });
     setTimeout(() => setToast(null), 3500);
   };
@@ -55,16 +199,16 @@ export default function ManageUsers() {
     setLoading(true);
     try {
       const res = await api.get("/admin/users", {
-        params: { search, role: roleFilter, branch_id: branchFilter, page, per_page: PER_PAGE },
+        params: { search, role: activeTab, branch_id: branchFilter, page, per_page: PER_PAGE },
       });
       setUsers(res.data.data);
       setTotal(res.data.total);
     } catch (err) {
-      showToast("error", err.response?.data?.message || "Lỗi tải danh sách.");
+      showToastMsg("error", err.response?.data?.message || "Lỗi tải danh sách.");
     } finally {
       setLoading(false);
     }
-  }, [search, roleFilter, branchFilter, page]);
+  }, [search, activeTab, branchFilter, page]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
@@ -74,22 +218,18 @@ export default function ManageUsers() {
       .catch((err) => console.error("Branch fetch error:", err));
   }, []);
 
-  // Reset về trang 1 khi filter thay đổi
-  useEffect(() => { setPage(1); }, [search, roleFilter, branchFilter]);
+  // Reset about page 1 when filters change
+  useEffect(() => { setPage(1); }, [search, activeTab, branchFilter]);
 
-  const handleChangeRole = async (userId, role) => {
-    setOpenDropdown(null);
+
+
+  const handleChangeBranch = async (userId, newBranchId) => {
     try {
-      const current = users.find((u) => u.id === userId);
-      const defaultBranch = current?.branchId || current?.branch_id || branches[0]?.id || null;
-      const res = await api.put(`/admin/users/${userId}/role`, {
-        role,
-        ...(role === "staff" && defaultBranch ? { branch_id: defaultBranch } : {}),
-      });
+      const res = await api.put(`/admin/users/${userId}/role`, { role: "staff", branch_id: newBranchId });
       setUsers(prev => prev.map(u => u.id === userId ? res.data.user : u));
-      showToast("success", res.data.message);
+      showToastMsg("success", "Đã cập nhật chi nhánh.");
     } catch (err) {
-      showToast("error", err.response?.data?.message || "Lỗi cập nhật role.");
+      showToastMsg("error", err.response?.data?.message || "Không thể cập nhật chi nhánh.");
     }
   };
 
@@ -97,11 +237,19 @@ export default function ManageUsers() {
     try {
       const res = await api.put(`/admin/users/${userId}/status`);
       setUsers(prev => prev.map(u => u.id === userId ? res.data.user : u));
-      showToast("success", res.data.message);
+      showToastMsg("success", res.data.message);
     } catch (err) {
-      showToast("error", err.response?.data?.message || "Lỗi thay đổi trạng thái.");
+      showToastMsg("error", err.response?.data?.message || "Lỗi thay đổi trạng thái.");
     }
   };
+
+  const handleStaffCreated = (data) => {
+    showToastMsg("success", data.message);
+    setShowCreateModal(false);
+    fetchUsers();
+  };
+
+
 
   const totalPages = Math.ceil(total / PER_PAGE);
   const isSelf = (uid) => uid === currentUser?.id;
@@ -110,7 +258,7 @@ export default function ManageUsers() {
     <div className="p-6 md:p-8 border-l border-[#333] bg-[#141414] min-h-screen relative">
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-xl shadow-2xl font-bold text-sm flex items-center gap-2 transition-all
+        <div className={`fixed top-6 right-6 z-[60] px-5 py-3 rounded-xl shadow-2xl font-bold text-sm flex items-center gap-2 transition-all
           ${toast.type === "success" ? "bg-emerald-900 text-emerald-300 border border-emerald-700" : "bg-red-900 text-red-300 border border-red-700"}`}>
           {toast.type === "success" ? <UserCheck size={16}/> : <UserX size={16}/>}
           {toast.msg}
@@ -118,8 +266,8 @@ export default function ManageUsers() {
       )}
 
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-black text-white uppercase tracking-wider border-l-4 border-[#E50914] pl-3">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-black text-white uppercase tracking-wider border-l-4 border-[#E50914] pl-3">
           Quản lý Tài Khoản
         </h1>
         <div className="flex items-center gap-3">
@@ -133,43 +281,64 @@ export default function ManageUsers() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex items-center gap-1 mb-5 bg-[#1a1a1a] p-1 rounded-xl border border-[#2a2a2a] w-fit">
+        <button onClick={() => setActiveTab("staff")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${
+            activeTab === "staff"
+              ? "bg-blue-600 text-white shadow-lg"
+              : "text-gray-400 hover:text-white hover:bg-[#222]"
+          }`}>
+          <Shield size={14} />
+          Nhân viên
+        </button>
+        <button onClick={() => setActiveTab("customer")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${
+            activeTab === "customer"
+              ? "bg-gray-600 text-white shadow-lg"
+              : "text-gray-400 hover:text-white hover:bg-[#222]"
+          }`}>
+          <Users size={14} />
+          Khách hàng
+        </button>
+      </div>
+
       {/* Toolbar */}
-      <div className="bg-[#1a1a1a] p-5 rounded-xl border border-[#333] mb-6 flex flex-col sm:flex-row gap-4">
+      <div className="bg-[#1a1a1a] p-4 rounded-xl border border-[#333] mb-5 flex flex-col sm:flex-row gap-3 items-center">
+        {/* Add staff button (only on staff tab) */}
+        {activeTab === "staff" && (
+          <button onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#E50914] hover:bg-[#F40612] text-white text-sm font-black rounded-xl transition-colors uppercase tracking-wider shrink-0">
+            <Plus size={16} />
+            Thêm nhân viên
+          </button>
+        )}
+
         {/* Search */}
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-600"/>
           <input
             type="text"
-            placeholder="Tìm theo tên hoặc email..."
+            placeholder={activeTab === "staff" ? "Tìm nhân viên theo tên, email..." : "Tìm khách hàng theo tên, email..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-[#111] border border-[#333] text-white rounded-xl text-sm outline-none focus:border-[#E50914] transition-colors placeholder:text-gray-700"
           />
         </div>
-        {/* Role filter */}
-        <select
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          className="bg-[#111] border border-[#333] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#E50914] transition-colors min-w-[160px]"
-        >
-          <option value="">Tất cả vai trò</option>
-          <option value="admin">Admin</option>
-          <option value="staff">Staff</option>
-          <option value="customer">Customer</option>
-        </select>
-        {/* Branch filter */}
-        <select
-          value={branchFilter}
-          onChange={(e) => setBranchFilter(e.target.value)}
-          className="bg-[#111] border border-[#333] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#E50914] transition-colors min-w-[180px]"
-        >
-          <option value="">Tất cả chi nhánh</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
+
+        {/* Branch filter (staff tab only) */}
+        {activeTab === "staff" && (
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="bg-[#111] border border-[#333] text-white rounded-xl px-4 py-2.5 text-sm outline-none focus:border-[#E50914] transition-colors min-w-[180px]"
+          >
+            <option value="">Tất cả chi nhánh</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Table */}
@@ -178,11 +347,19 @@ export default function ManageUsers() {
           <table className="min-w-full divide-y divide-[#2a2a2a]">
             <thead className="bg-[#111]">
               <tr>
-                {["#", "Người dùng", "Email", "SĐT", "Vai trò", "Tình trạng", "Ngày tạo", "Hành động"].map(h => (
-                  <th key={h} className="px-4 py-4 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
+                {activeTab === "staff" ? (
+                  <>
+                    {["#", "Nhân viên", "Email", "SĐT", "Chi nhánh", "Trạng thái", "Ngày tạo", "Hành động"].map(h => (
+                      <th key={h} className="px-4 py-4 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">{h}</th>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    {["#", "Khách hàng", "Email", "SĐT", "Trạng thái", "Ngày tạo", "Hành động"].map(h => (
+                      <th key={h} className="px-4 py-4 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">{h}</th>
+                    ))}
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#222]">
@@ -196,7 +373,15 @@ export default function ManageUsers() {
                 <tr>
                   <td colSpan={8} className="py-20 text-center">
                     <Users size={40} className="mx-auto text-gray-700 mb-3"/>
-                    <p className="text-gray-600 font-medium">Không tìm thấy tài khoản nào.</p>
+                    <p className="text-gray-600 font-medium">
+                      {activeTab === "staff" ? "Chưa có nhân viên nào." : "Không tìm thấy khách hàng."}
+                    </p>
+                    {activeTab === "staff" && (
+                      <button onClick={() => setShowCreateModal(true)}
+                        className="mt-3 text-[#E50914] text-sm font-bold hover:underline">
+                        + Thêm nhân viên đầu tiên
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : users.map((u, idx) => (
@@ -208,10 +393,9 @@ export default function ManageUsers() {
                     {(page - 1) * PER_PAGE + idx + 1}
                   </td>
 
-                  {/* Người dùng */}
+                  {/* Name */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      {/* Avatar chữ cái */}
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black shrink-0
                         ${u.role === "admin" ? "bg-red-900/40 text-red-400" : u.role === "staff" ? "bg-blue-900/40 text-blue-400" : "bg-gray-800 text-gray-400"}`}>
                         {u.name?.charAt(0)?.toUpperCase() ?? "?"}
@@ -231,30 +415,21 @@ export default function ManageUsers() {
                   {/* SĐT */}
                   <td className="px-4 py-3 text-gray-500 text-sm">{u.phone || "—"}</td>
 
-                  {/* Role */}
-                  <td className="px-4 py-3">
-                    <RoleBadge role={u.role}/>
-                    {u.role === "staff" && (
+                  {/* Chi nhánh (staff tab only) */}
+                  {activeTab === "staff" && (
+                    <td className="px-4 py-3">
                       <select
                         value={u.branchId || u.branch_id || ""}
-                        onChange={async (e) => {
-                          try {
-                            const res = await api.put(`/admin/users/${u.id}/role`, { role: "staff", branch_id: e.target.value });
-                            setUsers(prev => prev.map(item => item.id === u.id ? res.data.user : item));
-                            showToast("success", "Đã cập nhật chi nhánh nhân viên.");
-                          } catch (err) {
-                            showToast("error", err.response?.data?.message || "Không thể cập nhật chi nhánh.");
-                          }
-                        }}
-                        className="mt-2 block max-w-[180px] rounded-lg border border-[#333] bg-[#111] px-2 py-1 text-xs text-gray-300 outline-none"
+                        onChange={(e) => handleChangeBranch(u.id, e.target.value)}
+                        className="max-w-[180px] rounded-lg border border-[#333] bg-[#111] px-2 py-1.5 text-xs text-gray-300 outline-none focus:border-blue-500 transition-colors"
                       >
                         <option value="">Chọn chi nhánh</option>
                         {branches.map((branch) => (
                           <option key={branch.id} value={branch.id}>{branch.name}</option>
                         ))}
                       </select>
-                    )}
-                  </td>
+                    </td>
+                  )}
 
                   {/* Trạng thái */}
                   <td className="px-4 py-3">
@@ -276,36 +451,13 @@ export default function ManageUsers() {
 
                   {/* Hành động */}
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-
-                      {/* ── Đổi Role (Dropdown) ── */}
-                      {!isSelf(u.id) && u.role !== "admin" && (
-                        <div className="relative">
-                          <button
-                            onClick={() => setOpenDropdown(openDropdown === u.id ? null : u.id)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#252525] border border-[#333] hover:border-blue-600 text-gray-300 hover:text-blue-400 text-xs font-bold transition-all"
-                          >
-                            <Shield size={12}/> Quyền <ChevronDown size={11}/>
-                          </button>
-                          {openDropdown === u.id && (
-                            <div className="absolute right-0 top-full mt-1 z-30 bg-[#1e1e1e] border border-[#333] rounded-xl shadow-2xl overflow-hidden w-36">
-                              {["staff", "customer"].map(r => (
-                                <button key={r}
-                                  onClick={() => handleChangeRole(u.id, r)}
-                                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-colors
-                                    ${u.role === r ? "bg-[#2a2a2a] text-white" : "text-gray-400 hover:bg-[#2a2a2a] hover:text-white"}`}>
-                                  <span className={`w-2 h-2 rounded-full ${r === "staff" ? "bg-blue-400" : "bg-gray-400"}`}/>
-                                  {r === "staff" ? "Staff" : "Customer"}
-                                  {u.role === r && <span className="ml-auto text-[#E50914]">✓</span>}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* ── Toggle Khóa / Mở khóa ── */}
-                      {!isSelf(u.id) && u.role !== "admin" && (
+                    {isSelf(u.id) || u.role === "admin" ? (
+                      <span className="text-[11px] text-gray-700 font-medium italic px-1">
+                        Không thao tác
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {/* Lock/Unlock */}
                         <button
                           onClick={() => handleToggleStatus(u.id)}
                           title={u.isActive ? "Khóa tài khoản" : "Mở khóa tài khoản"}
@@ -316,15 +468,8 @@ export default function ManageUsers() {
                             }`}>
                           {u.isActive ? <Lock size={14}/> : <Unlock size={14}/>}
                         </button>
-                      )}
-
-                      {/* Placeholder khi là admin hoặc bản thân */}
-                      {(isSelf(u.id) || u.role === "admin") && (
-                        <span className="text-[11px] text-gray-700 font-medium italic px-1">
-                          Không thao tác
-                        </span>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -355,10 +500,16 @@ export default function ManageUsers() {
         )}
       </div>
 
-      {/* Đóng dropdown khi click ra ngoài */}
-      {openDropdown !== null && (
-        <div className="fixed inset-0 z-20" onClick={() => setOpenDropdown(null)}/>
+      {/* ── Modals ── */}
+      {showCreateModal && (
+        <CreateStaffModal
+          branches={branches}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={handleStaffCreated}
+        />
       )}
+
+
     </div>
   );
 }

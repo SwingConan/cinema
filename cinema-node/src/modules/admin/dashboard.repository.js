@@ -398,4 +398,78 @@ export const DashboardRepository = {
     `);
     return rows;
   },
+
+  // ── 13. Giá vé trung bình ─────────────────────────────────────────────
+  async getAvgTicketPrice(startDate, endDate, branchId = null) {
+    const branchFilter = branchId ? 'AND b.branch_id = ?' : '';
+    const params = branchId ? [startDate, endDate, branchId] : [startDate, endDate];
+    const [[row]] = await pool.query(`
+      SELECT ROUND(AVG(bs.price), 0) AS avg_ticket_price
+      FROM booking_seats bs
+      JOIN bookings b ON b.id = bs.booking_id
+      WHERE b.status = 'paid'
+        AND DATE(b.created_at) BETWEEN ? AND ?
+        ${branchFilter}
+    `, params);
+    return row;
+  },
+
+  // ── 14. Tỷ lệ hủy đơn ────────────────────────────────────────────────
+  async getCancelRate(startDate, endDate, branchId = null) {
+    const branchFilter = branchId ? 'AND branch_id = ?' : '';
+    const params = branchId ? [startDate, endDate, branchId] : [startDate, endDate];
+    const [[row]] = await pool.query(`
+      SELECT
+        COUNT(CASE WHEN status = 'cancelled' THEN 1 END) AS cancelled,
+        COUNT(*)                                         AS total,
+        ROUND(
+          COUNT(CASE WHEN status = 'cancelled' THEN 1 END) * 100.0
+          / NULLIF(COUNT(*), 0), 1
+        )                                                AS cancel_rate
+      FROM bookings
+      WHERE DATE(created_at) BETWEEN ? AND ?
+        ${branchFilter}
+    `, params);
+    return row;
+  },
+
+  // ── 15. Top 5 F&B bán chạy ────────────────────────────────────────────
+  async getTopConcessions(startDate, endDate, branchId = null) {
+    const branchFilter = branchId ? 'AND b.branch_id = ?' : '';
+    const params = branchId ? [startDate, endDate, branchId] : [startDate, endDate];
+    const [rows] = await pool.query(`
+      SELECT
+        c.id,
+        c.name,
+        SUM(bc.quantity)              AS total_qty,
+        SUM(bc.price * bc.quantity)   AS total_revenue
+      FROM booking_concessions bc
+      JOIN concessions c ON c.id = bc.concession_id
+      JOIN bookings    b ON b.id = bc.booking_id
+      WHERE b.status = 'paid'
+        AND DATE(b.created_at) BETWEEN ? AND ?
+        ${branchFilter}
+      GROUP BY c.id, c.name
+      ORDER BY total_qty DESC
+      LIMIT 5
+    `, params);
+    return rows;
+  },
+
+  // ── 16. Doanh thu trên mỗi ghế bán ────────────────────────────────────
+  async getRevenuePerSeat(startDate, endDate, branchId = null) {
+    const branchFilter = branchId ? 'AND b.branch_id = ?' : '';
+    const params = branchId ? [startDate, endDate, branchId] : [startDate, endDate];
+    const [[row]] = await pool.query(`
+      SELECT ROUND(
+        SUM(b.total_amount) / NULLIF(COUNT(bs.id), 0), 0
+      ) AS revenue_per_seat
+      FROM bookings b
+      JOIN booking_seats bs ON bs.booking_id = b.id
+      WHERE b.status = 'paid'
+        AND DATE(b.created_at) BETWEEN ? AND ?
+        ${branchFilter}
+    `, params);
+    return row;
+  },
 };

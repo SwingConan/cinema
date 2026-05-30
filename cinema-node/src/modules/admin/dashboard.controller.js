@@ -29,6 +29,12 @@ export const DashboardController = {
         DashboardRepository.getStackedRevenueChart(startDate, endDate, branchId),
         DashboardRepository.getPaymentMethodSplit(startDate, endDate, branchId),
         DashboardRepository.getMemberTierDistribution(),
+        // ── New analytics queries ──
+        DashboardRepository.getAvgTicketPrice(startDate, endDate, branchId),
+        DashboardRepository.getCancelRate(startDate, endDate, branchId),
+        DashboardRepository.getTopConcessions(startDate, endDate, branchId),
+        DashboardRepository.getRevenuePerSeat(startDate, endDate, branchId),
+        DashboardRepository.getRecentBookings(startDate, endDate, branchId),
       ];
 
       // Chỉ query so sánh chi nhánh khi xem toàn hệ thống
@@ -42,9 +48,11 @@ export const DashboardController = {
         overview, occupancy, heatmap, liveStatus,
         topMovies, lowOccupancy, stackedChart,
         paymentMethods, memberTiers,
+        avgTicketPriceRow, cancelRateRow, topConcessions,
+        revenuePerSeatRow, recentBookings,
       ] = results;
 
-      const branchComparison = !branchId ? results[9] : [];
+      const branchComparison = !branchId ? results[14] : [];
 
       // ── Hàm tính % thay đổi ────────────────────────────────────────
       const pctChange = (curr, prev) => {
@@ -157,6 +165,34 @@ export const DashboardController = {
           count:       Number(t.count),
           totalSpent:  Number(t.total_spent),
           totalPoints: Number(t.total_points),
+        })),
+
+        // ── New analytics data ──
+        avg_ticket_price: Number(avgTicketPriceRow?.avg_ticket_price) || 0,
+        cancel_rate: Number(cancelRateRow?.cancel_rate) || 0,
+        cancel_stats: {
+          cancelled: Number(cancelRateRow?.cancelled) || 0,
+          total: Number(cancelRateRow?.total) || 0,
+        },
+        revenue_per_seat: Number(revenuePerSeatRow?.revenue_per_seat) || 0,
+
+        top_concessions: (topConcessions || []).map(c => ({
+          id:           c.id,
+          name:         c.name,
+          totalQty:     Number(c.total_qty),
+          totalRevenue: Number(c.total_revenue),
+        })),
+
+        recent_bookings: (recentBookings || []).map(b => ({
+          id:            b.id,
+          totalAmount:   Number(b.total_amount),
+          status:        b.status,
+          createdAt:     b.created_at,
+          userName:      b.user_name,
+          userEmail:     b.user_email,
+          movieTitle:    b.movie_title,
+          paymentMethod: b.payment_method,
+          totalTickets:  Number(b.total_tickets),
         })),
       });
     } catch (err) {

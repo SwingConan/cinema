@@ -6,9 +6,10 @@ import {
 } from "recharts";
 import {
   DollarSign, Ticket, TrendingUp, TrendingDown,
-  AlertTriangle, Filter, Download, Coffee, Film,
+  AlertTriangle, Download, Coffee, Film,
   Clock, Target, Building2, CreditCard, Crown,
-  Award, Star, Zap, ChevronDown, ChevronUp,
+  Award, Star, Zap, BarChart2, XCircle, Armchair,
+  Activity, Users, ShoppingBag, Eye,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -22,6 +23,16 @@ const fmtShort = (n) => {
   return String(n ?? 0);
 };
 const fmtPct = (n) => `${Number(n || 0).toFixed(1)}%`;
+const timeAgo = (val) => {
+  if (!val) return '—';
+  const d = new Date(val.toString().replace('Z', ''));
+  if (isNaN(d)) return String(val);
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diff < 60) return 'Vừa xong';
+  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h trước`;
+  return `${Math.floor(diff / 86400)} ngày trước`;
+};
 
 // ── Palette & Constants ──────────────────────────────────────────────────
 const TIER_COLORS = {
@@ -38,7 +49,20 @@ const PAYMENT_LABELS = {
   zalopay: "ZaloPay", credit_card: "Thẻ tín dụng", bank_transfer: "Chuyển khoản",
 };
 
-const HEATMAP_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#E50914", "#a855f7"];
+const HEATMAP_EMOJI = {
+  'Buổi sáng (8h–12h)': '🌅',
+  'Buổi trưa (12h–16h)': '☀️',
+  'Buổi chiều (16h–19h)': '🌆',
+  'Giờ vàng (19h–22h)': '🌃',
+  'Suất khuya (22h+)': '🌙',
+};
+const HEATMAP_GRADIENTS = [
+  'from-blue-500/80 to-blue-600/80',
+  'from-emerald-500/80 to-emerald-600/80',
+  'from-amber-500/80 to-amber-600/80',
+  'from-red-500/80 to-red-600/80',
+  'from-purple-500/80 to-purple-600/80',
+];
 
 // ── Period Presets ────────────────────────────────────────────────────────
 const today = () => new Date().toISOString().split("T")[0];
@@ -52,7 +76,7 @@ const PRESETS = [
   { label: "Tháng này", getRange: () => [monthStart(), today()] },
 ];
 
-// ── Custom Tooltip ────────────────────────────────────────────────────────
+// ── Custom Tooltips ──────────────────────────────────────────────────────
 const ChartTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -79,11 +103,41 @@ const PieTooltip = ({ active, payload }) => {
   );
 };
 
+// ── Skeleton Shimmer ─────────────────────────────────────────────────────
+const Skeleton = ({ className = "" }) => (
+  <div className={`animate-pulse bg-gradient-to-r from-[#1a1a1a] via-[#252525] to-[#1a1a1a] bg-[length:200%_100%] rounded-xl ${className}`}
+    style={{ animation: 'shimmer 1.5s ease-in-out infinite' }} />
+);
+
+const SkeletonDashboard = () => (
+  <div className="p-6 md:p-8 space-y-6 min-h-screen">
+    <div className="flex justify-between items-center border-b border-[#2a2a2a] pb-5">
+      <Skeleton className="h-10 w-64" />
+      <Skeleton className="h-10 w-96" />
+    </div>
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-32" />)}
+    </div>
+    <div className="grid grid-cols-3 gap-4">
+      {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-20" />)}
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <Skeleton className="lg:col-span-2 h-80" />
+      <Skeleton className="h-80" />
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-64" />)}
+    </div>
+    <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+  </div>
+);
+
 // ── KPI Card ──────────────────────────────────────────────────────────────
-function KPICard({ label, value, change, icon: Icon, accent }) {
+function KPICard({ label, value, change, icon: Icon, accent, delay = 0 }) {
   const isPositive = change >= 0;
   return (
-    <div className="bg-[#1a1a1a] p-5 rounded-2xl border border-[#2a2a2a] hover:border-[#3a3a3a] transition-all">
+    <div className="bg-[#1a1a1a] p-5 rounded-2xl border border-[#2a2a2a] hover:border-[#3a3a3a] transition-all duration-300 hover:shadow-lg hover:shadow-black/20 hover:scale-[1.02]"
+      style={{ animationDelay: `${delay}ms` }}>
       <div className="flex items-center justify-between mb-3">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${accent}`}>
           <Icon size={18} />
@@ -106,6 +160,41 @@ function KPICard({ label, value, change, icon: Icon, accent }) {
   );
 }
 
+// ── Mini KPI Card (secondary row) ─────────────────────────────────────────
+function MiniKPI({ label, value, icon: Icon, accent, suffix = "" }) {
+  return (
+    <div className="bg-[#1a1a1a] p-4 rounded-2xl border border-[#2a2a2a] hover:border-[#3a3a3a] transition-all duration-300 flex items-center gap-4 hover:shadow-lg hover:shadow-black/20">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${accent}`}>
+        <Icon size={18} />
+      </div>
+      <div>
+        <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest">{label}</p>
+        <p className="text-white font-black text-lg leading-tight">{value}{suffix && <span className="text-gray-500 text-xs ml-1">{suffix}</span>}</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Bento Card wrapper ───────────────────────────────────────────────────
+function BentoCard({ title, icon: Icon, iconColor = "text-[#E50914]", badge, children, className = "" }) {
+  return (
+    <div className={`bg-[#1a1a1a] rounded-2xl border border-[#2a2a2a] hover:border-[#333] transition-all duration-300 overflow-hidden ${className}`}>
+      <div className="px-5 py-4 border-b border-[#2a2a2a] flex items-center justify-between">
+        <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+          <Icon className={`w-4 h-4 ${iconColor}`} />
+          {title}
+        </h3>
+        {badge != null && badge > 0 && (
+          <span className="bg-yellow-500/20 text-yellow-400 text-[10px] font-black px-2 py-0.5 rounded-full">{badge}</span>
+        )}
+      </div>
+      <div className="p-5">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN ──────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -120,8 +209,6 @@ export default function AdminDashboard() {
 
   const [branches, setBranches] = useState([]);
   const [selectedBranchId, setSelectedBranchId] = useState("");
-
-  const [activeTab, setActiveTab] = useState("movies");
 
   useEffect(() => {
     api.get("/admin/branches").then(res => setBranches(res.data?.data ?? res.data)).catch(() => {});
@@ -175,7 +262,7 @@ export default function AdminDashboard() {
     ? branches.find(b => String(b.id) === String(selectedBranchId))?.name || ""
     : "";
 
-  // Branch bar data — chỉ hiện chi nhánh có dữ liệu
+  // Branch bar data
   const branchBarData = (stats?.branch_comparison || []).filter(b => b.totalRevenue > 0 || b.totalTickets > 0);
 
   // Payment donut
@@ -197,23 +284,7 @@ export default function AdminDashboard() {
   }));
 
   // ── Loading ─────────────────────────────────────────────────────────────
-  if (loading && !stats) return (
-    <div className="flex justify-center items-center h-[70vh]">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin mx-auto mb-3"/>
-        <p className="text-gray-500 font-bold">Đang phân tích dữ liệu...</p>
-      </div>
-    </div>
-  );
-
-  // ── Tab definitions ─────────────────────────────────────────────────────
-  const TABS = [
-    { id: "movies", label: "Phim hàng đầu", icon: Film },
-    { id: "heatmap", label: "Khung giờ vàng", icon: Clock },
-    { id: "payment", label: "Kênh thanh toán", icon: CreditCard },
-    { id: "members", label: "Thành viên", icon: Crown },
-    { id: "alerts", label: "Cảnh báo", icon: AlertTriangle, count: stats?.low_occupancy_alerts?.length || 0 },
-  ];
+  if (loading && !stats) return <SkeletonDashboard />;
 
   return (
     <div className="p-6 md:p-8 space-y-6 min-h-screen relative">
@@ -231,13 +302,26 @@ export default function AdminDashboard() {
           </h1>
           <p className="text-gray-500 text-xs pl-4 mt-0.5">
             {isAllBranch ? "Phân tích toàn bộ chuỗi rạp phim" : `Dữ liệu chi tiết — ${selectedBranchName}`}
-            {live.showtimes > 0 && (
-              <span className="ml-2 text-[#E50914] font-bold">● {live.showtimes} suất đang chiếu · {live.audience} khán giả</span>
-            )}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* Live Pulse */}
+          {(live.showtimes > 0 || live.audience > 0) && (
+            <div className="flex items-center gap-2 bg-[#1a1a1a] border border-emerald-800/40 rounded-xl px-3 py-2 mr-1">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+              </span>
+              <span className="text-emerald-400 text-xs font-bold">
+                {live.showtimes} suất đang chiếu
+              </span>
+              {live.audience > 0 && (
+                <span className="text-emerald-300/60 text-xs">· {live.audience} khán giả</span>
+              )}
+            </div>
+          )}
+
           {/* Preset buttons */}
           <div className="flex bg-[#1a1a1a] rounded-xl border border-[#2a2a2a] p-1 gap-0.5">
             {PRESETS.map((p, i) => (
@@ -258,7 +342,7 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          {/* Custom date picker (collapsible) */}
+          {/* Custom date picker */}
           {customDateOpen && (
             <div className="flex items-center gap-1.5 bg-[#1a1a1a] px-2 py-1 rounded-xl border border-[#2a2a2a]">
               <input type="date" value={startDate} max={endDate}
@@ -288,18 +372,18 @@ export default function AdminDashboard() {
 
       {error && <div className="bg-red-900/20 border border-red-700/40 text-red-400 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
-      {/* ══════════ SECTION 1: KPI STRIP ══════════ */}
+      {/* ══════════ SECTION 1: KPI STRIP (5 primary) ══════════ */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KPICard label="Doanh thu" value={fmtVND(kpi.totalRevenue)} change={kpi.revenueChange}
-          icon={DollarSign} accent="bg-green-500/10 text-green-400"/>
+          icon={DollarSign} accent="bg-green-500/10 text-green-400" delay={0}/>
         <KPICard label="Đơn hàng" value={kpi.totalOrders ?? 0} change={kpi.ordersChange}
-          icon={Ticket} accent="bg-blue-500/10 text-blue-400"/>
+          icon={Ticket} accent="bg-blue-500/10 text-blue-400" delay={50}/>
         <KPICard label="Vé bán" value={`${kpi.totalTickets ?? 0} vé`} change={kpi.ticketsChange}
-          icon={TrendingUp} accent="bg-yellow-500/10 text-yellow-400"/>
+          icon={TrendingUp} accent="bg-yellow-500/10 text-yellow-400" delay={100}/>
         <KPICard label="Doanh thu F&B" value={fmtVND(kpi.concessionRevenue)} change={kpi.concessionChange}
-          icon={Coffee} accent="bg-orange-500/10 text-orange-400"/>
-        {/* Occupancy — compact progress */}
-        <div className="bg-[#1a1a1a] p-5 rounded-2xl border border-[#2a2a2a] hover:border-[#3a3a3a] transition-all">
+          icon={Coffee} accent="bg-orange-500/10 text-orange-400" delay={150}/>
+        {/* Occupancy — progress bar */}
+        <div className="bg-[#1a1a1a] p-5 rounded-2xl border border-[#2a2a2a] hover:border-[#3a3a3a] transition-all duration-300 hover:shadow-lg hover:shadow-black/20">
           <div className="flex items-center justify-between mb-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-purple-500/10 text-purple-400">
               <Target size={18}/>
@@ -316,6 +400,18 @@ export default function AdminDashboard() {
           </div>
           <p className="text-gray-600 text-[10px] mt-1">{kpi.soldSeatsToday}/{kpi.totalSeatsToday} ghế</p>
         </div>
+      </div>
+
+      {/* ══════════ SECTION 1.5: Secondary KPI Row (3 new metrics) ══════════ */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <MiniKPI label="Giá vé trung bình" value={fmtVND(stats?.avg_ticket_price || 0)}
+          icon={BarChart2} accent="bg-cyan-500/10 text-cyan-400" />
+        <MiniKPI label="Doanh thu / ghế" value={fmtVND(stats?.revenue_per_seat || 0)}
+          icon={Armchair} accent="bg-emerald-500/10 text-emerald-400" />
+        <MiniKPI label="Tỷ lệ hủy đơn" value={fmtPct(stats?.cancel_rate || 0)}
+          icon={XCircle}
+          accent={`${(stats?.cancel_rate || 0) > 10 ? 'bg-red-500/10 text-red-400' : 'bg-gray-500/10 text-gray-400'}`}
+          suffix={`${stats?.cancel_stats?.cancelled || 0}/${stats?.cancel_stats?.total || 0} đơn`} />
       </div>
 
       {/* ══════════ SECTION 2+3: Revenue Chart + Branch Performance ══════════ */}
@@ -416,198 +512,276 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* ══════════ SECTION 4: TABBED ANALYTICS ══════════ */}
-      <div className="bg-[#1a1a1a] rounded-2xl border border-[#2a2a2a] overflow-hidden">
-        {/* Tab Navigation */}
-        <div className="flex border-b border-[#2a2a2a] overflow-x-auto">
-          {TABS.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-5 py-4 text-sm font-bold whitespace-nowrap transition-all border-b-2 ${
-                activeTab === tab.id
-                  ? "text-[#E50914] border-[#E50914] bg-[#E50914]/5"
-                  : "text-gray-500 border-transparent hover:text-white hover:bg-[#222]"
-              }`}>
-              <tab.icon size={16}/>
-              {tab.label}
-              {tab.count > 0 && (
-                <span className="bg-yellow-500/20 text-yellow-400 text-[10px] font-black px-1.5 py-0.5 rounded-full">{tab.count}</span>
-              )}
-            </button>
-          ))}
-        </div>
+      {/* ══════════ SECTION 4: BENTO GRID ANALYTICS ══════════ */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
-        {/* Tab Content */}
-        <div className="p-6">
-
-          {/* ── Tab: Phim hàng đầu ── */}
-          {activeTab === "movies" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {stats?.top_movies?.length > 0 ? stats.top_movies.map((m, i) => {
-                const medals = ["bg-yellow-500 text-black", "bg-gray-300 text-black", "bg-orange-400 text-black", "bg-[#333] text-gray-400", "bg-[#333] text-gray-400"];
+        {/* ── Card: Top Phim ── */}
+        <BentoCard title="Phim hàng đầu" icon={Film}>
+          {stats?.top_movies?.length > 0 ? (
+            <div className="space-y-3">
+              {stats.top_movies.map((m, i) => {
+                const medals = ["🥇", "🥈", "🥉"];
+                const medalBg = ["bg-yellow-500/10", "bg-gray-500/10", "bg-orange-500/10"];
                 return (
-                  <div key={m.id} className="bg-[#111] rounded-xl p-4 border border-[#222] hover:border-[#333] transition-colors">
-                    <div className="flex items-start gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm shrink-0 ${medals[i]}`}>{i+1}</div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white font-bold text-sm truncate">{m.title}</p>
-                        <p className="text-gray-500 text-xs mt-0.5">{m.totalTickets} vé · {m.totalOrders} đơn</p>
-                        <p className="text-green-400 font-black text-sm mt-1">{fmtVND(m.totalRevenue)}</p>
+                  <div key={m.id} className={`flex items-center gap-3 p-2.5 rounded-xl ${medalBg[i] || 'bg-[#111]'} border border-[#222] hover:border-[#333] transition-colors`}>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#111] border border-[#333] shrink-0 text-sm font-black">
+                      {medals[i] || <span className="text-gray-500">{i+1}</span>}
+                    </div>
+                    {m.poster && (
+                      <img src={`/${m.poster}`} alt="" className="w-8 h-11 rounded object-cover shrink-0 border border-[#333]"
+                        onError={e => { e.target.style.display = 'none'; }} />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-bold text-xs truncate">{m.title}</p>
+                      <p className="text-gray-500 text-[10px]">{m.totalTickets} vé · {m.totalOrders} đơn</p>
+                    </div>
+                    <p className="text-green-400 font-black text-xs shrink-0">{fmtShort(m.totalRevenue)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : <div className="py-6 text-center text-gray-600 italic text-sm">Chưa có dữ liệu phim.</div>}
+        </BentoCard>
+
+        {/* ── Card: Khung giờ vàng ── */}
+        <BentoCard title="Khung giờ vàng" icon={Clock}>
+          {stats?.heatmap?.length > 0 ? (
+            <div className="space-y-3">
+              {stats.heatmap.map((h, i) => {
+                const max = Math.max(...stats.heatmap.map(x => x.tickets_sold), 1);
+                const pct = (h.tickets_sold / max) * 100;
+                const emoji = HEATMAP_EMOJI[h.time_slot] || '🕐';
+                return (
+                  <div key={i}>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-white text-xs font-bold flex items-center gap-1.5">
+                        <span className="text-base">{emoji}</span>
+                        {h.time_slot.replace(/\(.*\)/, '').trim()}
+                      </span>
+                      <div className="text-right">
+                        <span className="text-white font-black text-xs">{h.tickets_sold} vé</span>
+                        <span className="text-gray-600 text-[10px] ml-1.5">{fmtShort(h.revenue)}</span>
                       </div>
+                    </div>
+                    <div className="h-2.5 bg-[#2a2a2a] rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-700 bg-gradient-to-r ${HEATMAP_GRADIENTS[i] || 'from-gray-500 to-gray-600'}`}
+                        style={{ width: `${pct}%` }}/>
                     </div>
                   </div>
                 );
-              }) : <div className="col-span-3 py-8 text-center text-gray-600 italic text-sm">Chưa có dữ liệu phim.</div>}
+              })}
             </div>
-          )}
+          ) : <div className="py-6 text-center text-gray-600 italic text-sm">Chưa có dữ liệu khung giờ.</div>}
+        </BentoCard>
 
-          {/* ── Tab: Khung giờ vàng ── */}
-          {activeTab === "heatmap" && (
-            <div className="max-w-xl">
-              {stats?.heatmap?.length > 0 ? (
-                <div className="space-y-3">
-                  {stats.heatmap.map((h, i) => {
-                    const max = Math.max(...stats.heatmap.map(x => x.tickets_sold), 1);
-                    const pct = (h.tickets_sold / max) * 100;
-                    return (
-                      <div key={i}>
-                        <div className="flex justify-between items-baseline mb-1.5">
-                          <span className="text-white text-sm font-bold">{h.time_slot}</span>
-                          <div className="text-right">
-                            <span className="text-white font-black text-sm">{h.tickets_sold} vé</span>
-                            <span className="text-gray-600 text-xs ml-2">{fmtVND(h.revenue)}</span>
-                          </div>
-                        </div>
-                        <div className="h-3 bg-[#2a2a2a] rounded-full overflow-hidden">
-                          <div className="h-full rounded-full transition-all duration-700"
-                            style={{ width: `${pct}%`, background: HEATMAP_COLORS[i] || "#666" }}/>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : <div className="py-8 text-center text-gray-600 italic text-sm">Chưa có dữ liệu khung giờ.</div>}
-            </div>
-          )}
-
-          {/* ── Tab: Kênh thanh toán ── */}
-          {activeTab === "payment" && (
-            paymentPieData.length > 0 ? (
-              <div className="flex items-center gap-8 max-w-lg">
-                <div className="w-44 h-44 shrink-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={paymentPieData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={3} dataKey="value" stroke="none">
-                        {paymentPieData.map((e, idx) => <Cell key={idx} fill={e.fill}/>)}
-                      </Pie>
-                      <Tooltip content={<PieTooltip/>}/>
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex-1 space-y-2.5">
-                  {paymentPieData.map((p, i) => {
-                    const totalRev = paymentPieData.reduce((s, x) => s + x.value, 0);
-                    const pct = totalRev > 0 ? (p.value / totalRev) * 100 : 0;
-                    return (
-                      <div key={i} className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full shrink-0" style={{ background: p.fill }}/>
-                        <span className="text-gray-300 text-xs font-bold flex-1 truncate">{p.name}</span>
-                        <span className="text-white text-xs font-black">{fmtPct(pct)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+        {/* ── Card: Kênh thanh toán ── */}
+        <BentoCard title="Kênh thanh toán" icon={CreditCard}>
+          {paymentPieData.length > 0 ? (
+            <div className="flex items-center gap-4">
+              <div className="w-32 h-32 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={paymentPieData} cx="50%" cy="50%" innerRadius={30} outerRadius={55} paddingAngle={3} dataKey="value" stroke="none">
+                      {paymentPieData.map((e, idx) => <Cell key={idx} fill={e.fill}/>)}
+                    </Pie>
+                    <Tooltip content={<PieTooltip/>}/>
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
-            ) : <div className="py-8 text-center text-gray-600 italic text-sm">Chưa có dữ liệu thanh toán.</div>
-          )}
+              <div className="flex-1 space-y-2">
+                {paymentPieData.map((p, i) => {
+                  const totalRev = paymentPieData.reduce((s, x) => s + x.value, 0);
+                  const pct = totalRev > 0 ? (p.value / totalRev) * 100 : 0;
+                  return (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: p.fill }}/>
+                      <span className="text-gray-300 text-[11px] font-bold flex-1 truncate">{p.name}</span>
+                      <span className="text-white text-[11px] font-black">{fmtPct(pct)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : <div className="py-6 text-center text-gray-600 italic text-sm">Chưa có dữ liệu thanh toán.</div>}
+        </BentoCard>
 
-          {/* ── Tab: Thành viên ── */}
-          {activeTab === "members" && (
-            tierData.length > 0 ? (
-              <div className="flex items-center gap-8 max-w-lg">
-                <div className="w-44 h-44 shrink-0 relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={tierPieData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={3} dataKey="value" stroke="none">
-                        {tierPieData.map((e, idx) => <Cell key={idx} fill={e.fill}/>)}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="text-center">
-                      <p className="text-white font-black text-lg">{totalMembers}</p>
-                      <p className="text-gray-500 text-[9px] font-bold uppercase">Thành viên</p>
+        {/* ── Card: Top F&B ── */}
+        <BentoCard title="F&B bán chạy" icon={ShoppingBag} iconColor="text-orange-400">
+          {stats?.top_concessions?.length > 0 ? (
+            <div className="space-y-2.5">
+              {stats.top_concessions.map((c, i) => {
+                const max = stats.top_concessions[0]?.totalQty || 1;
+                const pct = (c.totalQty / max) * 100;
+                return (
+                  <div key={c.id}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-white text-xs font-bold flex items-center gap-1.5">
+                        <span className="text-base">{['🍿', '🥤', '🌽', '🧃', '🎁'][i] || '📦'}</span>
+                        <span className="truncate max-w-[120px]">{c.name}</span>
+                      </span>
+                      <div className="text-right">
+                        <span className="text-amber-400 font-black text-xs">{c.totalQty}</span>
+                        <span className="text-gray-600 text-[10px] ml-1.5">{fmtShort(c.totalRevenue)}</span>
+                      </div>
+                    </div>
+                    <div className="h-2 bg-[#2a2a2a] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-700 bg-gradient-to-r from-amber-500 to-orange-500"
+                        style={{ width: `${pct}%` }}/>
                     </div>
                   </div>
-                </div>
-                <div className="flex-1 space-y-2">
-                  {tierData.map(t => {
-                    const TierIcon = TIER_ICONS[t.tier] || Award;
-                    const colors = TIER_COLORS[t.tier] || TIER_COLORS.bronze;
-                    const pct = totalMembers > 0 ? (t.count / totalMembers) * 100 : 0;
-                    return (
-                      <div key={t.tier} className={`rounded-xl p-3 border ${colors.border} ${colors.bg}`}>
-                        <div className="flex items-center gap-2">
-                          <TierIcon size={14} className={colors.text}/>
-                          <span className={`text-xs font-black uppercase ${colors.text}`}>{TIER_LABELS[t.tier]}</span>
-                          <span className="ml-auto text-white font-black text-sm">{t.count}</span>
-                          <span className="text-gray-500 text-[10px]">({fmtPct(pct)})</span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                );
+              })}
+            </div>
+          ) : <div className="py-6 text-center text-gray-600 italic text-sm">Chưa có dữ liệu F&B.</div>}
+        </BentoCard>
+
+        {/* ── Card: Thành viên ── */}
+        <BentoCard title="Thành viên" icon={Crown} iconColor="text-yellow-400">
+          {tierData.length > 0 ? (
+            <div className="flex items-center gap-4">
+              <div className="w-28 h-28 shrink-0 relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={tierPieData} cx="50%" cy="50%" innerRadius={28} outerRadius={48} paddingAngle={3} dataKey="value" stroke="none">
+                      {tierPieData.map((e, idx) => <Cell key={idx} fill={e.fill}/>)}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="text-center">
+                    <p className="text-white font-black text-sm">{totalMembers}</p>
+                    <p className="text-gray-500 text-[8px] font-bold uppercase">TV</p>
+                  </div>
                 </div>
               </div>
-            ) : <div className="py-8 text-center text-gray-600 italic text-sm">Chưa có dữ liệu thành viên.</div>
-          )}
+              <div className="flex-1 space-y-1.5">
+                {tierData.map(t => {
+                  const TierIcon = TIER_ICONS[t.tier] || Award;
+                  const colors = TIER_COLORS[t.tier] || TIER_COLORS.bronze;
+                  const pct = totalMembers > 0 ? (t.count / totalMembers) * 100 : 0;
+                  return (
+                    <div key={t.tier} className={`rounded-lg p-2 border ${colors.border} ${colors.bg}`}>
+                      <div className="flex items-center gap-1.5">
+                        <TierIcon size={12} className={colors.text}/>
+                        <span className={`text-[10px] font-black uppercase ${colors.text}`}>{TIER_LABELS[t.tier]}</span>
+                        <span className="ml-auto text-white font-black text-xs">{t.count}</span>
+                        <span className="text-gray-500 text-[9px]">({fmtPct(pct)})</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : <div className="py-6 text-center text-gray-600 italic text-sm">Chưa có dữ liệu thành viên.</div>}
+        </BentoCard>
 
-          {/* ── Tab: Cảnh báo vận hành ── */}
-          {activeTab === "alerts" && (
-            <>
-              {stats?.low_occupancy_alerts?.length > 0 ? (
-                <>
-                  <div className="bg-yellow-900/10 border border-yellow-800/40 rounded-xl p-4 mb-4 flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 text-yellow-400 shrink-0"/>
-                    <p className="text-yellow-300 text-sm font-bold">
-                      {stats.low_occupancy_alerts.length} suất chiếu có tỷ lệ lấp đầy dưới 15% trong 7 ngày tới
-                    </p>
-                  </div>
-                  <div className="space-y-2 max-w-2xl">
-                    {stats.low_occupancy_alerts.slice(0, 5).map(s => {
-                      const pct = Number(s.occupancyRate);
-                      const urgency = pct < 5 ? "border-red-700/60 bg-red-900/10" : "border-yellow-800/40 bg-yellow-900/5";
-                      const badgeColor = pct < 5 ? "text-red-400" : "text-yellow-400";
-                      return (
-                        <div key={s.showtimeId} className={`rounded-xl p-3 border ${urgency} flex items-center gap-3`}>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white font-bold text-sm truncate">{s.movieTitle}</p>
-                            <p className="text-gray-500 text-xs">
-                              {s.roomName} · {new Date((s.startTime ?? '').toString().replace('Z', '')).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                            </p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className={`font-black text-base ${badgeColor}`}>{fmtPct(pct)}</p>
-                            <p className="text-gray-600 text-[10px]">{s.soldSeats}/{s.totalSeats} ghế</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {stats.low_occupancy_alerts.length > 5 && (
-                      <p className="text-gray-600 text-xs text-center pt-1">
-                        + {stats.low_occupancy_alerts.length - 5} cảnh báo khác
+        {/* ── Card: Cảnh báo vận hành ── */}
+        <BentoCard title="Cảnh báo vận hành" icon={AlertTriangle} iconColor="text-yellow-400" badge={stats?.low_occupancy_alerts?.length || 0}>
+          {stats?.low_occupancy_alerts?.length > 0 ? (
+            <div className="space-y-2">
+              {stats.low_occupancy_alerts.slice(0, 4).map(s => {
+                const pct = Number(s.occupancyRate);
+                const urgency = pct < 5 ? "border-red-700/60 bg-red-900/10" : "border-yellow-800/40 bg-yellow-900/5";
+                const badgeColor = pct < 5 ? "text-red-400" : "text-yellow-400";
+                return (
+                  <div key={s.showtimeId} className={`rounded-xl p-2.5 border ${urgency} flex items-center gap-2.5`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-bold text-xs truncate">{s.movieTitle}</p>
+                      <p className="text-gray-500 text-[10px]">
+                        {s.roomName} · {new Date((s.startTime ?? '').toString().replace('Z', '')).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                       </p>
-                    )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`font-black text-sm ${badgeColor}`}>{fmtPct(pct)}</p>
+                      <p className="text-gray-600 text-[9px]">{s.soldSeats}/{s.totalSeats}</p>
+                    </div>
                   </div>
-                </>
-              ) : (
-                <div className="py-8 text-center">
-                  <Target className="w-10 h-10 text-green-600 mx-auto mb-2"/>
-                  <p className="text-green-400 font-bold text-sm">Không có cảnh báo nào!</p>
-                  <p className="text-gray-600 text-xs mt-1">Tất cả suất chiếu đều có tỷ lệ lấp đầy tốt</p>
-                </div>
+                );
+              })}
+              {stats.low_occupancy_alerts.length > 4 && (
+                <p className="text-gray-600 text-[10px] text-center pt-0.5">+ {stats.low_occupancy_alerts.length - 4} cảnh báo khác</p>
               )}
-            </>
+            </div>
+          ) : (
+            <div className="py-6 text-center">
+              <Target className="w-8 h-8 text-green-600 mx-auto mb-2"/>
+              <p className="text-green-400 font-bold text-xs">Không có cảnh báo!</p>
+              <p className="text-gray-600 text-[10px] mt-0.5">Tất cả suất chiếu đều có tỷ lệ lấp đầy tốt</p>
+            </div>
           )}
+        </BentoCard>
+      </div>
+
+      {/* ══════════ SECTION 5: RECENT BOOKINGS TABLE ══════════ */}
+      <div className="bg-[#1a1a1a] rounded-2xl border border-[#2a2a2a] overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#2a2a2a] flex items-center justify-between">
+          <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+            <Eye className="w-4 h-4 text-[#E50914]" />
+            Giao dịch gần nhất
+          </h3>
+          <span className="text-gray-600 text-[10px] font-bold uppercase">Top 10</span>
         </div>
+
+        {stats?.recent_bookings?.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#2a2a2a] text-gray-500 text-[10px] font-bold uppercase tracking-wider">
+                  <th className="text-left px-5 py-3">#</th>
+                  <th className="text-left px-3 py-3">Phim</th>
+                  <th className="text-left px-3 py-3">Khách hàng</th>
+                  <th className="text-center px-3 py-3">Vé</th>
+                  <th className="text-right px-3 py-3">Tổng tiền</th>
+                  <th className="text-center px-3 py-3">Thanh toán</th>
+                  <th className="text-center px-3 py-3">Trạng thái</th>
+                  <th className="text-right px-5 py-3">Thời gian</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#222]">
+                {stats.recent_bookings.map(b => (
+                  <tr key={b.id} className="hover:bg-[#222] transition-colors">
+                    <td className="px-5 py-3 text-gray-500 text-xs font-mono">#{b.id}</td>
+                    <td className="px-3 py-3">
+                      <p className="text-white font-bold text-xs truncate max-w-[180px]">{b.movieTitle || '—'}</p>
+                    </td>
+                    <td className="px-3 py-3">
+                      <p className="text-gray-400 text-xs truncate max-w-[140px]">{b.userName || b.userEmail || 'N/A'}</p>
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span className="text-white font-black text-xs">{b.totalTickets}</span>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <span className="text-green-400 font-black text-xs">{fmtVND(b.totalAmount)}</span>
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span className="text-sm">
+                        {b.paymentMethod === 'cash' || b.paymentMethod === '' ? '💵' : '💳'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                        b.status === 'paid' ? 'bg-green-900/30 text-green-400' :
+                        b.status === 'used' ? 'bg-blue-900/30 text-blue-400' :
+                        b.status === 'pending' ? 'bg-amber-900/30 text-amber-400' :
+                        'bg-red-900/30 text-red-400'
+                      }`}>
+                        {b.status === 'paid' ? 'Đã TT' : b.status === 'used' ? 'Đã dùng' : b.status === 'pending' ? 'Chờ TT' : 'Hủy'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <span className="text-gray-500 text-[11px]">{timeAgo(b.createdAt)}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-12 text-center text-gray-600">
+            <Ticket className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm italic">Chưa có giao dịch trong khoảng thời gian này.</p>
+          </div>
+        )}
       </div>
     </div>
   );

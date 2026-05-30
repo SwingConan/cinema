@@ -97,4 +97,36 @@ const toggleActive = async (id) => {
   return rows.length ? mapUser(rows[0]) : null;
 };
 
-export const UserAdminRepository = { findAll, updateRole, toggleActive };
+/**
+ * Kiểm tra email đã tồn tại chưa
+ */
+const findByEmail = async (email) => {
+  const [[row]] = await pool.query(
+    'SELECT id, email FROM users WHERE email = ? LIMIT 1',
+    [email]
+  );
+  return row || null;
+};
+
+/**
+ * Admin tạo tài khoản staff trực tiếp (không cần OTP)
+ */
+const createStaff = async ({ name, email, password, phone, branchId }) => {
+  const [result] = await pool.query(
+    `INSERT INTO users (name, email, password, phone, role, branch_id,
+     is_active, email_verified_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'staff', ?, 1, NOW(), NOW(), NOW())`,
+    [name, email, password, phone || null, branchId]
+  );
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.email, u.phone, u.role, u.branch_id, u.is_active, u.created_at,
+            b.name AS branch_name, b.city AS branch_city
+     FROM users u
+     LEFT JOIN branches b ON b.id = u.branch_id
+     WHERE u.id = ? LIMIT 1`,
+    [result.insertId]
+  );
+  return rows.length ? mapUser(rows[0]) : null;
+};
+
+export const UserAdminRepository = { findAll, updateRole, toggleActive, findByEmail, createStaff };

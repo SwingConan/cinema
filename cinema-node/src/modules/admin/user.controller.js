@@ -1,5 +1,6 @@
 // src/modules/admin/user.controller.js
 import { UserAdminRepository } from './user.repository.js';
+import bcrypt from 'bcrypt';
 
 export const UserAdminController = {
 
@@ -14,6 +15,53 @@ export const UserAdminController = {
 
       const { rows, total } = await UserAdminRepository.findAll({ search, role, branchId, page, perPage });
       return res.json({ data: rows, total, page, per_page: perPage });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  },
+
+  // POST /api/admin/users/create-staff — Admin tạo tài khoản staff trực tiếp
+  async createStaff(req, res) {
+    try {
+      const { name, email, password, phone, branch_id } = req.body;
+      const branchId = branch_id || req.body.branchId;
+
+      // ── Validation ──
+      if (!name || name.trim().length < 2) {
+        return res.status(422).json({ message: 'Họ tên phải có ít nhất 2 ký tự.' });
+      }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(422).json({ message: 'Email không hợp lệ.' });
+      }
+      if (!password || password.length < 8) {
+        return res.status(422).json({ message: 'Mật khẩu phải có ít nhất 8 ký tự.' });
+      }
+      if (!branchId) {
+        return res.status(422).json({ message: 'Vui lòng chọn chi nhánh cho nhân viên.' });
+      }
+
+      // ── Check trùng email ──
+      const existing = await UserAdminRepository.findByEmail(email);
+      if (existing) {
+        return res.status(422).json({ message: 'Email này đã được sử dụng.' });
+      }
+
+      // ── Hash password ──
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // ── Tạo staff ──
+      const user = await UserAdminRepository.createStaff({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password: hashedPassword,
+        phone: phone || null,
+        branchId,
+      });
+
+      return res.status(201).json({
+        message: `Đã tạo tài khoản nhân viên "${user.name}" thành công.`,
+        user,
+      });
     } catch (err) {
       res.status(500).json({ message: err.message });
     }
@@ -38,7 +86,7 @@ export const UserAdminController = {
       }
 
       if (role === 'staff' && !branchId) {
-        return res.status(422).json({ message: 'Vui long chon chi nhanh cho nhan vien.' });
+        return res.status(422).json({ message: 'Vui lòng chọn chi nhánh cho nhân viên.' });
       }
 
       const updated = await UserAdminRepository.updateRole(targetId, role, branchId);
@@ -71,3 +119,4 @@ export const UserAdminController = {
     }
   },
 };
+
