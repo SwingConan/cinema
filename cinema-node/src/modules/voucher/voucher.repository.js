@@ -35,8 +35,29 @@ const findAll = async () => {
      FROM vouchers v
      LEFT JOIN branches b ON b.id = v.branch_id
      LEFT JOIN voucher_usages vu ON vu.voucher_id = v.id
+     WHERE v.user_id IS NULL
      GROUP BY v.id, b.name
      ORDER BY v.created_at DESC`
+  );
+  return rows.map(mapRow);
+};
+
+const findPublicPromotions = async () => {
+  const [rows] = await pool.query(
+    `SELECT v.*, b.name AS branch_name, COUNT(vu.id) AS used_count
+     FROM vouchers v
+     LEFT JOIN branches b ON b.id = v.branch_id
+     LEFT JOIN voucher_usages vu ON vu.voucher_id = v.id
+     WHERE v.user_id IS NULL
+       AND v.is_active = 1
+       AND v.valid_from <= NOW()
+       AND v.valid_to >= NOW()
+       AND (
+         v.usage_limit IS NULL OR
+         (SELECT COUNT(*) FROM voucher_usages WHERE voucher_id = v.id) < v.usage_limit
+       )
+     GROUP BY v.id, b.name
+     ORDER BY v.valid_to ASC, v.created_at DESC`
   );
   return rows.map(mapRow);
 };
@@ -155,7 +176,7 @@ const recordUsage = async (conn, { voucherId, userId, bookingId, discountAmount 
 };
 
 export const VoucherRepository = {
-  findAll, findById, findByCode, create, update, remove,
+  findAll, findPublicPromotions, findById, findByCode, create, update, remove,
   findActiveByUserId, findByUserId,
   getTotalUsageCount, getUserUsageCount, recordUsage,
 };

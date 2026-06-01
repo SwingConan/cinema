@@ -7,6 +7,13 @@ import { requirePasscode } from '../../middlewares/passcode.middleware.js';
 
 const router = Router();
 
+// ── Staff POS route ──────────────────────────────────────────────────────
+router.get('/customer-lookup',
+  authenticate,
+  authorize('staff', 'admin'),
+  BookingController.customerLookup
+);
+
 // ── Customer routes ───────────────────────────────────────────────────────
 router.get('/',     authenticate, BookingController.index);
 router.get('/:id/vietqr', authenticate, BookingController.getVietQR);
@@ -19,7 +26,7 @@ router.post('/',
   BookingController.store
 );
 
-// ── Staff POS route (mounted at /api/staff/pos/bookings) ─────────────────
+// Staff POS bookings creation and payment confirm/cancel
 router.post('/bookings',
   authenticate,
   authorize('staff', 'admin'),

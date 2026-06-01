@@ -1,5 +1,7 @@
 // src/modules/concession/concession.service.js
 import { ConcessionRepository } from './concession.repository.js';
+import fs from 'fs';
+import path from 'path';
 
 const getAll = async ({ adminView = false, branchId = null } = {}) => {
   return adminView
@@ -30,19 +32,53 @@ const validateBasePayload = ({ name, price }) => {
   }
 };
 
-const create = async (payload) => {
+const create = async (payload, imageFile) => {
   validateBasePayload(payload);
-  return ConcessionRepository.create({ ...payload, price: Number(payload.price) });
+  const data = {
+    name: payload.name,
+    description: payload.description || null,
+    price: Number(payload.price),
+    isActive: payload.isActive === 'true' || payload.isActive === true || payload.isActive === 1 || payload.isActive === '1' || payload.isActive === 'active',
+  };
+  if (imageFile) {
+    data.image = 'posters/' + imageFile.filename;
+  } else {
+    data.image = payload.image || null;
+  }
+  return ConcessionRepository.create(data);
 };
 
-const update = async (id, payload) => {
-  await getById(id);
+const update = async (id, payload, imageFile) => {
+  const existing = await getById(id);
   validateBasePayload(payload);
-  return ConcessionRepository.update(id, { ...payload, price: Number(payload.price) });
+  const data = {
+    name: payload.name,
+    description: payload.description || null,
+    price: Number(payload.price),
+    isActive: payload.isActive === 'true' || payload.isActive === true || payload.isActive === 1 || payload.isActive === '1' || payload.isActive === 'active',
+  };
+  if (imageFile) {
+    data.image = 'posters/' + imageFile.filename;
+    if (existing.image && !existing.image.startsWith('http')) {
+      const oldPath = path.join('public', 'uploads', existing.image);
+      fs.unlink(oldPath, (err) => {
+        if (err && err.code !== 'ENOENT') console.error('Error deleting old concession image:', err);
+      });
+    }
+  } else {
+    data.image = payload.image || null;
+  }
+  return ConcessionRepository.update(id, data);
 };
 
 const remove = async (id) => {
-  await getById(id);
+  const existing = await getById(id);
+  if (existing.image && !existing.image.startsWith('http')) {
+    const oldPath = path.join('public', 'uploads', existing.image);
+    fs.unlink(oldPath, (err) => {
+      if (err && err.code !== 'ENOENT') console.error('Error deleting concession image:', err);
+    });
+  }
   return ConcessionRepository.remove(id);
 };
 

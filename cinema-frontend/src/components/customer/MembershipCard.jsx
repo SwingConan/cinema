@@ -5,7 +5,7 @@ import PasscodeModal from "./PasscodeModal";
 import {
   Crown, Star, Gem, Shield, TrendingUp, Gift,
   ChevronDown, ChevronUp, Coins, ArrowRight,
-  Ticket, X, Loader2, Minus, Plus, AlertCircle,
+  Ticket, X, Loader2,
 } from "lucide-react";
 
 const TIER_CONFIG = {
@@ -18,6 +18,16 @@ const TIER_CONFIG = {
 const fmtNumber = (n) => new Intl.NumberFormat("vi-VN").format(n);
 const fmtCurrency = (n) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(n);
 
+const REWARDS = [
+  { id: "opt1", points: 100, label: "Giảm 5%", desc: "Tối đa 15.000đ, đơn từ 0đ" },
+  { id: "opt2", points: 200, label: "Giảm 10%", desc: "Tối đa 30.000đ, đơn từ 0đ" },
+  { id: "opt3", points: 500, label: "Giảm 25%", desc: "Tối đa 75.000đ, đơn từ 100k" },
+  { id: "opt4", points: 1000, label: "Giảm 50%", desc: "Tối đa 150.000đ, đơn từ 150k" },
+  { id: "opt5", points: 300, label: "Voucher 30k", desc: "Giảm 30.000đ cho đơn từ 100k" },
+  { id: "opt6", points: 500, label: "Voucher 60k", desc: "Giảm 60.000đ cho đơn từ 150k" },
+  { id: "opt7", points: 1000, label: "Voucher 130k", desc: "Giảm 130.000đ cho đơn từ 250k" },
+];
+
 export default function MembershipCard({ onRedeemed }) {
   const [data, setData] = useState(null);
   const [history, setHistory] = useState(null);
@@ -26,7 +36,7 @@ export default function MembershipCard({ onRedeemed }) {
 
   // ── Redeem State ─────────────────────────────────────────
   const [showRedeem, setShowRedeem] = useState(false);
-  const [redeemPoints, setRedeemPoints] = useState(100);
+  const [selectedReward, setSelectedReward] = useState("opt1");
   const [redeeming, setRedeeming] = useState(false);
   const [showPasscode, setShowPasscode] = useState(false);
   const [securityToken, setSecurityToken] = useState(null);
@@ -53,18 +63,19 @@ export default function MembershipCard({ onRedeemed }) {
 
   // ── Redeem Handler ───────────────────────────────────────
   const handleRedeem = async (overrideToken) => {
-    if (redeemPoints < 100) return toast.error("Tối thiểu 100 điểm");
-    if (redeemPoints > data.loyaltyPoints) return toast.error("Không đủ điểm");
+    const reward = REWARDS.find((item) => item.id === selectedReward);
+    if (!reward) return toast.error("Vui lòng chọn gói đổi thưởng");
+    if (reward.points > data.loyaltyPoints) return toast.error("Không đủ điểm");
 
     setRedeeming(true);
     const token = (typeof overrideToken === 'string') ? overrideToken : (typeof securityToken === 'string' ? securityToken : null);
     const headers = token ? { 'X-Security-Token': token } : {};
     try {
-      const res = await api.post("/customer/loyalty/redeem", { points: redeemPoints }, { headers });
+      const res = await api.post("/customer/loyalty/redeem", { rewardOptionId: selectedReward }, { headers });
       const codeText = res.data?.voucherCode ? ` Mã voucher: ${res.data.voucherCode}` : "";
-      toast.success(`Đổi thành công ${fmtNumber(redeemPoints)} điểm → ${fmtCurrency(Math.floor(redeemPoints / 100) * 1000)}.${codeText}`);
+      toast.success(`Đổi thành công ${fmtNumber(reward.points)} điểm lấy ${reward.label}.${codeText}`);
       setShowRedeem(false);
-      setRedeemPoints(100);
+      setSelectedReward("opt1");
       setSecurityToken(null);
       setHistory(null); // Reset history cache
       refreshData();
@@ -94,8 +105,7 @@ export default function MembershipCard({ onRedeemed }) {
 
   const tier = TIER_CONFIG[data.memberTier] || TIER_CONFIG.bronze;
   const TierIcon = tier.icon;
-  const pointValue = Math.floor(data.loyaltyPoints / 100) * 1000;
-  const redeemValue = Math.floor(redeemPoints / 100) * 1000;
+  const selectedRewardConfig = REWARDS.find((item) => item.id === selectedReward) || REWARDS[0];
 
   return (
     <div className="space-y-4">
@@ -122,9 +132,6 @@ export default function MembershipCard({ onRedeemed }) {
             <div className="text-right">
               <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Điểm tích lũy</p>
               <p className={`text-2xl font-black ${tier.text}`}>{fmtNumber(data.loyaltyPoints)}</p>
-              {data.loyaltyPoints > 0 && (
-                <p className="text-[10px] text-gray-500">≈ {fmtCurrency(pointValue)}</p>
-              )}
             </div>
           </div>
 
@@ -181,7 +188,7 @@ export default function MembershipCard({ onRedeemed }) {
               className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r ${tier.color} text-white font-bold text-sm hover:opacity-90 transition-all shadow-lg`}
             >
               <Gift className="w-4 h-4" />
-              Đổi điểm thưởng ({fmtNumber(data.loyaltyPoints)} điểm ≈ {fmtCurrency(pointValue)})
+              Đổi điểm thưởng ({fmtNumber(data.loyaltyPoints)} điểm)
             </button>
           )}
         </div>
@@ -215,99 +222,48 @@ export default function MembershipCard({ onRedeemed }) {
                 <Coins className="w-8 h-8 text-yellow-500/30" />
               </div>
 
-              {/* Point input */}
-              <div>
-                <label className="text-xs text-gray-500 font-bold mb-2 block">Số điểm muốn đổi</label>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setRedeemPoints(p => Math.max(100, p - 100))}
-                    className="w-10 h-10 rounded-lg bg-[#222] border border-[#333] flex items-center justify-center hover:bg-[#333] transition-colors"
-                  >
-                    <Minus className="w-4 h-4 text-gray-400" />
-                  </button>
-                  <input
-                    type="number"
-                    value={redeemPoints}
-                    onChange={e => setRedeemPoints(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="flex-1 bg-[#111] border border-[#2a2a2a] rounded-xl px-4 py-3 text-center text-white text-xl font-black focus:border-[#E50914] outline-none"
-                    min={100}
-                    max={data.loyaltyPoints}
-                    step={100}
-                  />
-                  <button
-                    onClick={() => setRedeemPoints(p => Math.min(data.loyaltyPoints, p + 100))}
-                    className="w-10 h-10 rounded-lg bg-[#222] border border-[#333] flex items-center justify-center hover:bg-[#333] transition-colors"
-                  >
-                    <Plus className="w-4 h-4 text-gray-400" />
-                  </button>
-                </div>
-                {/* Quick select */}
-                <div className="flex gap-2 mt-2">
-                  {[100, 500, 1000].filter(v => v <= data.loyaltyPoints).map(v => (
-                    <button key={v}
-                      onClick={() => setRedeemPoints(v)}
-                      className={`flex-1 text-xs py-1.5 rounded-lg border font-bold transition-colors ${
-                        redeemPoints === v
-                          ? `${tier.bg} ${tier.border} ${tier.text}`
-                          : "border-[#333] text-gray-500 hover:border-[#444]"
-                      }`}>
-                      {fmtNumber(v)}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto pr-1">
+                {REWARDS.map((item) => {
+                  const isAffordable = data.loyaltyPoints >= item.points;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={!isAffordable || redeeming}
+                      onClick={() => setSelectedReward(item.id)}
+                      className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                        selectedReward === item.id
+                          ? "border-[#E50914] bg-[#E50914]/10"
+                          : isAffordable
+                            ? "border-[#333] hover:border-gray-500"
+                            : "border-[#222] opacity-40 cursor-not-allowed"
+                      }`}
+                    >
+                      <span className="text-white font-bold text-sm">{item.label}</span>
+                      <span className="text-gray-400 text-xs mt-1">{item.desc}</span>
+                      <span className="text-yellow-400 text-xs font-bold mt-2">{item.points} điểm</span>
                     </button>
-                  ))}
-                  <button
-                    onClick={() => setRedeemPoints(data.loyaltyPoints)}
-                    className={`flex-1 text-xs py-1.5 rounded-lg border font-bold transition-colors ${
-                      redeemPoints === data.loyaltyPoints
-                        ? `${tier.bg} ${tier.border} ${tier.text}`
-                        : "border-[#333] text-gray-500 hover:border-[#444]"
-                    }`}>
-                    Tất cả
-                  </button>
-                </div>
+                  );
+                })}
               </div>
 
-              {/* Conversion preview */}
-              <div className="bg-[#111] rounded-xl p-4 border border-[#2a2a2a] space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Quy đổi</span>
-                  <span className="text-gray-400">100 điểm = {fmtCurrency(1000)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-400 text-sm">Bạn nhận được</span>
-                  <span className="text-emerald-400 font-black text-lg">
-                    {redeemPoints >= 100 ? fmtCurrency(redeemValue) : "—"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">Điểm còn lại</span>
-                  <span className="text-white font-bold">{fmtNumber(Math.max(0, data.loyaltyPoints - redeemPoints))}</span>
-                </div>
+              <div className="bg-[#111] rounded-xl p-4 border border-[#2a2a2a] flex items-center justify-between text-xs">
+                <span className="text-gray-500">Điểm còn lại</span>
+                <span className="text-white font-bold">
+                  {fmtNumber(Math.max(0, data.loyaltyPoints - selectedRewardConfig.points))}
+                </span>
               </div>
-
-              {/* Validation */}
-              {redeemPoints < 100 && (
-                <div className="flex items-center gap-2 text-red-400 text-xs">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Tối thiểu 100 điểm để đổi</span>
-                </div>
-              )}
-              {redeemPoints > data.loyaltyPoints && (
-                <div className="flex items-center gap-2 text-red-400 text-xs">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Không đủ điểm (thiếu {fmtNumber(redeemPoints - data.loyaltyPoints)} điểm)</span>
-                </div>
-              )}
 
               {/* Confirm button */}
               <button
                 onClick={() => handleRedeem()}
-                disabled={redeeming || redeemPoints < 100 || redeemPoints > data.loyaltyPoints}
+                disabled={redeeming || selectedRewardConfig.points > data.loyaltyPoints}
                 className="w-full py-3 rounded-xl bg-[#E50914] text-white font-black text-sm hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
               >
                 {redeeming ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Đang xử lý...</>
                 ) : (
-                  <><Ticket className="w-4 h-4" /> Xác nhận đổi {fmtNumber(redeemPoints)} điểm</>
+                  <><Ticket className="w-4 h-4" /> Xác nhận đổi {fmtNumber(selectedRewardConfig.points)} điểm</>
                 )}
               </button>
             </div>
@@ -337,7 +293,7 @@ export default function MembershipCard({ onRedeemed }) {
                   <div>
                     <p className="text-sm text-white font-medium">{pt.description}</p>
                     <p className="text-[11px] text-gray-500">
-                      {new Date(String(pt.createdAt).replace("Z", "")).toLocaleString("vi-VN")}
+                      {new Date(pt.createdAt).toLocaleString("vi-VN")}
                     </p>
                   </div>
                   <div className="text-right">

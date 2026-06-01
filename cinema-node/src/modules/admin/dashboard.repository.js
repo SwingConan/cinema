@@ -29,12 +29,12 @@ export const DashboardRepository = {
         SELECT b.showtime_id, COUNT(bs.id) AS sold_seats
         FROM bookings b
         JOIN booking_seats bs ON bs.booking_id = b.id
-        WHERE b.status = 'paid'
-          AND DATE(b.created_at) = CURDATE()
+        WHERE b.status IN ('paid', 'used')
+          AND DATE(b.created_at) = DATE(DATE_ADD(NOW(), INTERVAL 7 HOUR))
         GROUP BY b.showtime_id
       ) sold ON sold.showtime_id = s.id
 
-      WHERE DATE(s.start_time) = CURDATE() ${branchFilter}
+      WHERE DATE(s.start_time) = DATE(DATE_ADD(NOW(), INTERVAL 7 HOUR)) ${branchFilter}
     `, params);
     return row;
   },
@@ -55,9 +55,9 @@ export const DashboardRepository = {
       LEFT JOIN booking_seats       bs ON bs.booking_id = b.id
       LEFT JOIN booking_concessions bc ON bc.booking_id = b.id
 
-      WHERE b.status = 'paid'
-        AND MONTH(b.created_at) = MONTH(CURDATE())
-        AND YEAR(b.created_at)  = YEAR(CURDATE())
+      WHERE b.status IN ('paid', 'used')
+        AND MONTH(b.created_at) = MONTH(DATE_ADD(NOW(), INTERVAL 7 HOUR))
+        AND YEAR(b.created_at)  = YEAR(DATE_ADD(NOW(), INTERVAL 7 HOUR))
         ${branchFilter}
     `, params);
     return row;
@@ -82,7 +82,7 @@ export const DashboardRepository = {
       FROM bookings b
       JOIN booking_seats bs ON bs.booking_id = b.id
       JOIN showtimes s      ON s.id = b.showtime_id
-      WHERE b.status = 'paid'
+      WHERE b.status IN ('paid', 'used')
         AND DATE(b.created_at) BETWEEN ? AND ?
         ${branchFilter}
       GROUP BY time_slot
@@ -113,12 +113,12 @@ export const DashboardRepository = {
         SELECT b.showtime_id, COUNT(bs.id) AS sold_seats
         FROM bookings b
         JOIN booking_seats bs ON bs.booking_id = b.id
-        WHERE b.status = 'paid'
+        WHERE b.status IN ('paid', 'used')
         GROUP BY b.showtime_id
       ) sold ON sold.showtime_id = s.id
 
-      WHERE s.start_time <= NOW()
-        AND s.end_time   >= NOW()
+      WHERE s.start_time <= DATE_ADD(NOW(), INTERVAL 7 HOUR)
+        AND s.end_time   >= DATE_ADD(NOW(), INTERVAL 7 HOUR)
         ${branchFilter}
     `, params);
     return row;
@@ -140,7 +140,7 @@ export const DashboardRepository = {
       FROM movies m
       JOIN showtimes s      ON s.movie_id    = m.id
       JOIN bookings  b      ON b.showtime_id = s.id
-        AND b.status = 'paid'
+        AND b.status IN ('paid', 'used')
         AND DATE(b.created_at) BETWEEN ? AND ?
         ${branchFilter}
       JOIN booking_seats bs ON bs.booking_id = b.id
@@ -177,12 +177,12 @@ export const DashboardRepository = {
         SELECT b.showtime_id, COUNT(bs.id) AS sold_seats
         FROM bookings b
         JOIN booking_seats bs ON bs.booking_id = b.id
-        WHERE b.status = 'paid'
+        WHERE b.status IN ('paid', 'used')
         GROUP BY b.showtime_id
       ) sold ON sold.showtime_id = s.id
 
-      WHERE s.start_time > NOW()
-        AND s.start_time < DATE_ADD(NOW(), INTERVAL 7 DAY)
+      WHERE s.start_time > DATE_ADD(NOW(), INTERVAL 7 HOUR)
+        AND s.start_time < DATE_ADD(DATE_ADD(NOW(), INTERVAL 7 HOUR), INTERVAL 7 DAY)
         AND r.total_seats > 0
         ${branchFilter}
       HAVING occupancy_rate < 15
@@ -206,7 +206,7 @@ export const DashboardRepository = {
       LEFT JOIN booking_seats       bs ON bs.booking_id = b.id
       LEFT JOIN booking_concessions bc ON bc.booking_id = b.id
 
-      WHERE b.status = 'paid'
+      WHERE b.status IN ('paid', 'used')
         AND DATE(b.created_at) BETWEEN ? AND ?
         ${branchFilter}
 
@@ -220,44 +220,45 @@ export const DashboardRepository = {
   async getOverview(startDate, endDate, prevStartDate, prevEndDate, branchId = null) {
     const branchFilter = branchId ? 'AND b.branch_id = ?' : '';
     const ticketBranchFilter = branchId ? 'AND b2.branch_id = ?' : '';
+    const prevTicketBranchFilter = branchId ? 'AND b3.branch_id = ?' : '';
     
     const query = `
       SELECT
         /* ── Kỳ hiện tại ── */
         COALESCE(SUM(CASE
-          WHEN b.status = 'paid' AND DATE(b.created_at) BETWEEN ? AND ?
+          WHEN b.status IN ('paid', 'used') AND DATE(b.created_at) BETWEEN ? AND ?
           THEN b.total_amount ELSE 0 END), 0)   AS total_revenue,
 
         (SELECT COUNT(*) FROM booking_seats bs2
           JOIN bookings b2 ON b2.id = bs2.booking_id
-          WHERE b2.status = 'paid'
+          WHERE b2.status IN ('paid', 'used')
             AND DATE(b2.created_at) BETWEEN ? AND ?
             ${ticketBranchFilter})  AS total_tickets,
 
         COUNT(CASE
-          WHEN b.status = 'paid'
+          WHEN b.status IN ('paid', 'used')
            AND DATE(b.created_at) BETWEEN ? AND ? THEN 1 END) AS total_orders,
 
         /* ── Kỳ trước (period-over-period) ── */
         COALESCE(SUM(CASE
-          WHEN b.status = 'paid' AND DATE(b.created_at) BETWEEN ? AND ?
+          WHEN b.status IN ('paid', 'used') AND DATE(b.created_at) BETWEEN ? AND ?
           THEN b.total_amount ELSE 0 END), 0)   AS prev_total_revenue,
 
         (SELECT COUNT(*) FROM booking_seats bs3
           JOIN bookings b3 ON b3.id = bs3.booking_id
-          WHERE b3.status = 'paid'
+          WHERE b3.status IN ('paid', 'used')
             AND DATE(b3.created_at) BETWEEN ? AND ?
-            ${ticketBranchFilter})  AS prev_total_tickets,
+            ${prevTicketBranchFilter})  AS prev_total_tickets,
 
         COUNT(CASE
-          WHEN b.status = 'paid'
+          WHEN b.status IN ('paid', 'used')
            AND DATE(b.created_at) BETWEEN ? AND ? THEN 1 END) AS prev_total_orders,
 
         /* ── Doanh thu F&B kỳ hiện tại ── */
         (SELECT COALESCE(SUM(bc.price * bc.quantity), 0)
          FROM booking_concessions bc
          JOIN bookings b4 ON b4.id = bc.booking_id
-         WHERE b4.status = 'paid'
+         WHERE b4.status IN ('paid', 'used')
            AND DATE(b4.created_at) BETWEEN ? AND ?
            ${branchFilter ? 'AND b4.branch_id = ?' : ''}) AS concession_revenue,
 
@@ -265,7 +266,7 @@ export const DashboardRepository = {
         (SELECT COALESCE(SUM(bc2.price * bc2.quantity), 0)
          FROM booking_concessions bc2
          JOIN bookings b5 ON b5.id = bc2.booking_id
-         WHERE b5.status = 'paid'
+         WHERE b5.status IN ('paid', 'used')
            AND DATE(b5.created_at) BETWEEN ? AND ?
            ${branchFilter ? 'AND b5.branch_id = ?' : ''}) AS prev_concession_revenue
 
@@ -302,7 +303,7 @@ export const DashboardRepository = {
       LEFT JOIN showtimes s ON s.id = b.showtime_id
       LEFT JOIN movies    m ON m.id = s.movie_id
       LEFT JOIN payments  p ON p.booking_id = b.id AND p.status = 'success'
-      WHERE b.status = 'paid'
+      WHERE b.status IN ('paid', 'used')
         AND DATE(b.created_at) BETWEEN ? AND ?
         ${branchFilter}
       ORDER BY b.created_at DESC
@@ -334,7 +335,7 @@ export const DashboardRepository = {
         FROM bookings b
         LEFT JOIN booking_seats       bs ON bs.booking_id = b.id
         LEFT JOIN booking_concessions bc ON bc.booking_id = b.id
-        WHERE b.status = 'paid'
+        WHERE b.status IN ('paid', 'used')
           AND DATE(b.created_at) BETWEEN ? AND ?
         GROUP BY b.branch_id
       ) revenue ON revenue.branch_id = br.id
@@ -351,10 +352,10 @@ export const DashboardRepository = {
           SELECT b2.showtime_id, COUNT(bs2.id) AS sold_seats
           FROM bookings b2
           JOIN booking_seats bs2 ON bs2.booking_id = b2.id
-          WHERE b2.status = 'paid' AND DATE(b2.created_at) = CURDATE()
+          WHERE b2.status IN ('paid', 'used') AND DATE(b2.created_at) = DATE(DATE_ADD(NOW(), INTERVAL 7 HOUR))
           GROUP BY b2.showtime_id
         ) sold ON sold.showtime_id = s.id
-        WHERE DATE(s.start_time) = CURDATE()
+        WHERE DATE(s.start_time) = DATE(DATE_ADD(NOW(), INTERVAL 7 HOUR))
         GROUP BY r.branch_id
       ) occ ON occ.branch_id = br.id
       WHERE br.status = 'active'
@@ -374,7 +375,7 @@ export const DashboardRepository = {
         COALESCE(SUM(b.total_amount), 0) AS revenue
       FROM bookings b
       JOIN payments p ON p.booking_id = b.id AND p.status = 'success'
-      WHERE b.status = 'paid'
+      WHERE b.status IN ('paid', 'used')
         AND DATE(b.created_at) BETWEEN ? AND ?
         ${branchFilter}
       GROUP BY p.method
@@ -407,7 +408,7 @@ export const DashboardRepository = {
       SELECT ROUND(AVG(bs.price), 0) AS avg_ticket_price
       FROM booking_seats bs
       JOIN bookings b ON b.id = bs.booking_id
-      WHERE b.status = 'paid'
+      WHERE b.status IN ('paid', 'used')
         AND DATE(b.created_at) BETWEEN ? AND ?
         ${branchFilter}
     `, params);
@@ -446,7 +447,7 @@ export const DashboardRepository = {
       FROM booking_concessions bc
       JOIN concessions c ON c.id = bc.concession_id
       JOIN bookings    b ON b.id = bc.booking_id
-      WHERE b.status = 'paid'
+      WHERE b.status IN ('paid', 'used')
         AND DATE(b.created_at) BETWEEN ? AND ?
         ${branchFilter}
       GROUP BY c.id, c.name
@@ -466,7 +467,7 @@ export const DashboardRepository = {
       ) AS revenue_per_seat
       FROM bookings b
       JOIN booking_seats bs ON bs.booking_id = b.id
-      WHERE b.status = 'paid'
+      WHERE b.status IN ('paid', 'used')
         AND DATE(b.created_at) BETWEEN ? AND ?
         ${branchFilter}
     `, params);

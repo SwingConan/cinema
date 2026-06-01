@@ -253,6 +253,32 @@ export default function MovieDetailPage() {
     return review.rating === filterRating;
   });
 
+  const renderTrailer = () => {
+    if (!movie || (!movie.trailerUrl && !movie.trailer_url)) {
+      return (
+        <div className="aspect-w-16 aspect-h-9 rounded-lg bg-[#111] border border-[#333] flex items-center justify-center h-48">
+          <span className="text-gray-500">Chưa có Trailer</span>
+        </div>
+      );
+    }
+    const url = movie.trailerUrl || movie.trailer_url;
+    const videoId = url.includes('youtu.be/')
+      ? url.split('youtu.be/')[1]?.split('?')[0]
+      : url.split('v=')[1]?.split('&')[0];
+    return (
+      <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden shadow-sm bg-black border border-[#444]">
+        <iframe
+          src={`https://www.youtube.com/embed/${videoId}`}
+          title="YouTube video player"
+          frameBorder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          className="w-full h-48 sm:h-64 object-cover"
+        ></iframe>
+      </div>
+    );
+  };
+
   if (loading)
     return (
       <div className="flex justify-center items-center h-[60vh] text-[#E50914] font-bold">
@@ -276,7 +302,7 @@ export default function MovieDetailPage() {
         <div
           className="absolute inset-0 opacity-20 transform scale-105"
           style={{
-            backgroundImage: `url(http://localhost:8000/uploads/${movie.poster})`,
+            backgroundImage: `url(/uploads/${movie.poster})`,
             backgroundPosition: "center",
             backgroundSize: "cover",
             filter: "blur(8px)",
@@ -289,7 +315,7 @@ export default function MovieDetailPage() {
           <div className="flex flex-col md:flex-row gap-8 items-end w-full">
             {movie.poster && (
               <img
-                src={`http://localhost:8000/uploads/${movie.poster}`}
+                src={`/uploads/${movie.poster}`}
                 alt={movie.title}
                 className="w-48 md:w-64 rounded-xl shadow-2xl border border-[#333] hidden sm:block"
               />
@@ -362,6 +388,14 @@ export default function MovieDetailPage() {
               </div>
             )}
           </section>
+
+          {/* Mobile Trailer */}
+          <div className="bg-[#222] p-5 rounded-xl border border-[#333] lg:hidden mb-10">
+            <h3 className="text-xl font-bold mb-4 text-white border-l-4 border-[#E50914] pl-2">
+              Trailer
+            </h3>
+            {renderTrailer()}
+          </div>
 
           <section className="mb-10">
             <h2 className="text-2xl font-bold mb-6 text-white border-l-4 border-[#E50914] pl-2">
@@ -787,29 +821,7 @@ export default function MovieDetailPage() {
             <h3 className="text-xl font-bold mb-4 text-white border-l-4 border-[#E50914] pl-2">
               Trailer
             </h3>
-            {(movie.trailerUrl || movie.trailer_url) ? (() => {
-              const url = movie.trailerUrl || movie.trailer_url;
-              // Hỗ trợ cả youtube.com/watch?v=ID và youtu.be/ID
-              const videoId = url.includes('youtu.be/')
-                ? url.split('youtu.be/')[1]?.split('?')[0]
-                : url.split('v=')[1]?.split('&')[0];
-              return (
-                <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden shadow-sm bg-black border border-[#444]">
-                  <iframe
-                    src={`https://www.youtube.com/embed/${videoId}`}
-                    title="YouTube video player"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="w-full h-48 object-cover"
-                  ></iframe>
-                </div>
-              );
-            })() : (
-              <div className="aspect-w-16 aspect-h-9 rounded-lg bg-[#111] border border-[#333] flex items-center justify-center h-48">
-                <span className="text-gray-500">Chưa có Trailer</span>
-              </div>
-            )}
+            {renderTrailer()}
           </div>
         </div>
       </div>

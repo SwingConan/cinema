@@ -138,7 +138,6 @@ export default function BookingPage() {
     if (!pendingBookingId) return;
     const handleBeforeUnload = () => {
       // Dùng sendBeacon để gửi cancel request trước khi tab đóng
-      const token = localStorage.getItem('token');
       navigator.sendBeacon(
         `/api/customer/bookings/${pendingBookingId}/cancel`,
         new Blob([JSON.stringify({ _method: 'PUT' })], { type: 'application/json' })
@@ -669,8 +668,10 @@ export default function BookingPage() {
                           >
                             <div className="flex items-center justify-between gap-3">
                               <span className="font-mono text-sm font-black text-white">{voucher.code}</span>
-                              <span className="text-xs font-black text-emerald-400">
-                                -{formatCurrency(voucher.discountValue)}
+                              <span className="text-xs font-black text-emerald-400 font-bold">
+                                {voucher.discountType === "percentage"
+                                  ? `-${voucher.discountValue}%`
+                                  : `-${formatCurrency(voucher.discountValue)}`}
                               </span>
                             </div>
                             <p className="text-[11px] text-gray-500 truncate">{voucher.name}</p>

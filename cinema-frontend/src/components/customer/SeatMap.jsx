@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import {
   ZoomIn, ZoomOut, RotateCcw, Maximize2,
 } from "lucide-react";
@@ -95,13 +95,32 @@ export default function SeatMap({
   const handleZoomIn  = () => setZoom(z => Math.min(z + 0.2, 2.0));
   const handleZoomOut = () => setZoom(z => Math.max(z - 0.2, 0.4));
   const handleReset   = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
-  const handleFit     = () => {
+  const handleFit     = useCallback(() => {
     if (!containerRef.current) return;
     const cw = containerRef.current.clientWidth;
     const fitZoom = Math.min(cw / svgW, 1.2);
     setZoom(fitZoom);
     setPan({ x: 0, y: 0 });
-  };
+  }, [svgW]);
+
+  // ── Auto-fit on mount + window resize (quan trọng cho mobile) ──
+  useEffect(() => {
+    // Delay nhỏ để đợi container render xong
+    const timer = setTimeout(() => handleFit(), 100);
+
+    let resizeTimer;
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => handleFit(), 200);
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(resizeTimer);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [handleFit]);
 
   const handleWheel = (e) => {
     if (e.ctrlKey || e.metaKey) {

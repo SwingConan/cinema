@@ -202,6 +202,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState("");
   const [activePreset, setActivePreset] = useState(1); // "7 ngày" by default
   const [customDateOpen, setCustomDateOpen] = useState(false);
+  const [alertsModalOpen, setAlertsModalOpen] = useState(false);
 
   const initialRange = PRESETS[1].getRange();
   const [startDate, setStartDate] = useState(initialRange[0]);
@@ -296,16 +297,16 @@ export default function AdminDashboard() {
 
       {/* ══════════ HEADER ══════════ */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#2a2a2a] pb-5">
-        <div className="shrink-0">
-          <h1 className="text-2xl font-black text-white border-l-4 border-[#E50914] pl-3 uppercase tracking-wider whitespace-nowrap">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-black text-white border-l-4 border-[#E50914] pl-3 uppercase tracking-wider truncate" title={isAllBranch ? "Tổng quan hệ thống" : `Chi nhánh: ${selectedBranchName}`}>
             {isAllBranch ? "Tổng quan hệ thống" : `Chi nhánh: ${selectedBranchName}`}
           </h1>
-          <p className="text-gray-500 text-xs pl-4 mt-0.5">
+          <p className="text-gray-500 text-xs pl-4 mt-0.5 truncate" title={isAllBranch ? "Phân tích toàn bộ chuỗi rạp phim" : `Dữ liệu chi tiết — ${selectedBranchName}`}>
             {isAllBranch ? "Phân tích toàn bộ chuỗi rạp phim" : `Dữ liệu chi tiết — ${selectedBranchName}`}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap lg:justify-end xl:flex-nowrap">
           {/* Live Pulse */}
           {(live.showtimes > 0 || live.audience > 0) && (
             <div className="flex items-center gap-2 bg-[#1a1a1a] border border-emerald-800/40 rounded-xl px-3 py-2 mr-1">
@@ -357,7 +358,7 @@ export default function AdminDashboard() {
 
           {/* Branch filter */}
           <select value={selectedBranchId} onChange={e => setSelectedBranchId(e.target.value)}
-            className="bg-[#1a1a1a] text-xs text-white border border-[#2a2a2a] rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#E50914] font-bold max-w-[160px]">
+            className="bg-[#1a1a1a] text-xs text-white border border-[#2a2a2a] rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#E50914] font-bold w-40 md:w-48 max-w-full">
             <option value="">Tất cả chi nhánh</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
@@ -699,7 +700,11 @@ export default function AdminDashboard() {
                 );
               })}
               {stats.low_occupancy_alerts.length > 4 && (
-                <p className="text-gray-600 text-[10px] text-center pt-0.5">+ {stats.low_occupancy_alerts.length - 4} cảnh báo khác</p>
+                <button
+                  onClick={() => setAlertsModalOpen(true)}
+                  className="w-full text-center text-[10px] text-[#E50914] hover:text-red-400 font-bold transition-colors pt-1 cursor-pointer">
+                  + {stats.low_occupancy_alerts.length - 4} cảnh báo khác
+                </button>
               )}
             </div>
           ) : (
@@ -783,6 +788,59 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {/* ══════════ MODAL: ALL OPERATIONAL WARNINGS ══════════ */}
+      {alertsModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setAlertsModalOpen(false)} />
+          
+          {/* Modal Content */}
+          <div className="relative bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="px-5 py-4 border-b border-[#2a2a2a] flex items-center justify-between">
+              <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                Cảnh báo vận hành ({stats?.low_occupancy_alerts?.length || 0})
+              </h3>
+              <button 
+                onClick={() => setAlertsModalOpen(false)}
+                className="text-gray-500 hover:text-white transition-colors text-lg font-bold p-1">
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-5 max-h-[60vh] overflow-y-auto space-y-3">
+              {stats?.low_occupancy_alerts?.map(s => {
+                const pct = Number(s.occupancyRate);
+                const urgency = pct < 5 ? "border-red-700/60 bg-red-900/10" : "border-yellow-800/40 bg-yellow-900/5";
+                const badgeColor = pct < 5 ? "text-red-400" : "text-yellow-400";
+                return (
+                  <div key={s.showtimeId} className={`rounded-xl p-3 border ${urgency} flex items-center gap-3`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-bold text-xs truncate">{s.movieTitle}</p>
+                      <p className="text-gray-500 text-[10px] mt-0.5">
+                        {s.roomName} · {new Date((s.startTime ?? '').toString().replace('Z', '')).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`font-black text-sm ${badgeColor}`}>{fmtPct(pct)}</p>
+                      <p className="text-gray-600 text-[9px] mt-0.5">{s.soldSeats}/{s.totalSeats} ghế</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            <div className="px-5 py-3 border-t border-[#2a2a2a] bg-[#111] flex justify-end">
+              <button 
+                onClick={() => setAlertsModalOpen(false)}
+                className="px-4 py-2 bg-[#222] hover:bg-[#333] text-white text-xs font-bold rounded-xl transition-colors">
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

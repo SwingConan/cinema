@@ -23,14 +23,14 @@ const getHistory = async (req, res) => {
 
 const redeem = async (req, res) => {
   try {
-    const { points } = req.body;
-    const result = await LoyaltyService.redeemPoints(req.user.id, parseInt(points));
+    const result = await LoyaltyService.redeemPoints(req.user.id, req.body);
     if (!result.success) return res.status(400).json(result);
     AuditService.logAction(req, 'loyalty.redeem', {
       entityType: 'user',
       entityId: req.user.id,
       details: {
-        points: parseInt(points),
+        points: req.body?.points ? parseInt(req.body.points, 10) : undefined,
+        rewardOptionId: req.body?.rewardOptionId,
         voucherCode: result.voucherCode,
         discountAmount: result.discountAmount,
       },

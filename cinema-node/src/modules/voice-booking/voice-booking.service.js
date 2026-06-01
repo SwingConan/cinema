@@ -25,7 +25,7 @@ const getSystemContext = async () => {
     SELECT m.id, m.title, m.genre, m.duration, m.rated
     FROM movies m
     WHERE m.release_date <= CURDATE()
-      OR EXISTS (SELECT 1 FROM showtimes s WHERE s.movie_id = m.id AND s.start_time >= NOW())
+      OR EXISTS (SELECT 1 FROM showtimes s WHERE s.movie_id = m.id AND s.start_time >= DATE_ADD(NOW(), INTERVAL 7 HOUR))
     ORDER BY m.release_date DESC LIMIT 20
   `);
 
@@ -41,7 +41,7 @@ const getSystemContext = async () => {
     FROM showtimes s
     JOIN movies m ON s.movie_id = m.id
     JOIN rooms r ON s.room_id = r.id
-    WHERE s.start_time >= NOW()
+    WHERE s.start_time >= DATE_ADD(NOW(), INTERVAL 7 HOUR)
     ORDER BY s.start_time ASC LIMIT 50
   `);
 
@@ -112,6 +112,9 @@ QUY TẮC:
 - Nếu khách nói "tối nay", "chiều nay", "ngày mai" → chuyển thành ngày/giờ cụ thể.
 - Nếu có nhiều suất chiếu, liệt kê tối đa 5 suất.
 - Luôn kèm suggestions để gợi ý bước tiếp theo.
+- TUYỆT ĐỐI KHÔNG thông báo hoặc tự xác nhận là đã chọn ghế thành công, đặt vé thành công hoặc tạo mã thanh toán/vé trực tiếp trong đoạn chat. Trợ lý AI không có quyền thay đổi cơ sở dữ liệu vé hoặc thanh toán.
+- Khi khách hàng chọn suất chiếu (select_showtime) hoặc muốn đặt vé, hãy phản hồi rằng bạn đã mở trang phòng chiếu và hướng dẫn họ: tự tay chọn các ghế mong muốn trên sơ đồ ghế và bấm nút thanh toán bằng mã VietQR an toàn trên màn hình. Ví dụ: "CineBot đã chọn suất chiếu và mở trang phòng chiếu tương ứng. Bạn vui lòng chọn ghế mong muốn trên sơ đồ trực quan và quét mã VietQR để hoàn tất thanh toán nhé!"
+- Khi khách hàng yêu cầu chọn ghế (select_seats) hoặc xác nhận đặt vé (confirm_booking), hãy lịch sự hướng dẫn họ hoàn tất thao tác chọn ghế trên màn hình phòng chiếu và quét mã chuyển tiền, tuyệt đối không được nói là đã hoàn tất hoặc thành công.
 `;
 
 /**

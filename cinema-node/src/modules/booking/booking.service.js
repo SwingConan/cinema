@@ -26,6 +26,7 @@ import { VoucherRepository } from '../voucher/voucher.repository.js';
 import { VoucherService } from '../voucher/voucher.service.js';
 import { emitSeatStatus } from '../seat-lock/seat-lock.service.js';
 import { emailQueue } from '../../workers/email.worker.js';
+import { LoyaltyService } from '../loyalty/loyalty.service.js';
 
 const getMyBookings = async (userId) => {
   return BookingRepository.findByUser(userId);
@@ -185,10 +186,10 @@ const _getShowtime = async (conn, showtimeId) => {
 };
 
 // ── SHARED HELPER: Đẩy email E-Ticket vào Queue (fire-and-forget) ─────────
-const _enqueueEmailTicket = (bookingId, qrCode) => {
+const _enqueueEmailTicket = (bookingId, qrCode, customerEmail = null) => {
   pool.query(
     `SELECT
-       u.email, u.name AS user_name,
+       u.email AS user_email, u.name AS user_name,
        m.title  AS movie_title,
        r.name   AS room_name, r.type AS room_type,
        s.start_time,
@@ -205,10 +206,12 @@ const _enqueueEmailTicket = (bookingId, qrCode) => {
      GROUP BY b.id, u.email, u.name, m.title, r.name, r.type, s.start_time, b.total_amount`,
     [bookingId]
   ).then(async ([rows]) => {
-    if (!rows.length || !rows[0].email) return;
+    if (!rows.length) return;
     const row = rows[0];
+    const targetEmail = customerEmail || row.user_email;
+    if (!targetEmail) return;
     await emailQueue.add('sendTicket', {
-      email:   row.email,
+      email:   targetEmail,
       qrCode,
       bookingId,
       ticketDetails: {
@@ -220,7 +223,7 @@ const _enqueueEmailTicket = (bookingId, qrCode) => {
         totalAmount: row.total_amount,
       },
     });
-    console.log(`[Booking] 📧 Đã đẩy E-Ticket #${bookingId} → ${row.email}`);
+    console.log(`[Booking] 📧 Đã đẩy E-Ticket #${bookingId} → ${targetEmail}`);
   }).catch(err => {
     console.warn('[Booking] ⚠️ Không đẩy được job email:', err.message);
   });
@@ -261,13 +264,27 @@ const createBooking = async ({ userId, showtimeId, seatIds, concessions = [], vo
       voucherId = voucherValidation.voucher.id;
     }
 
-    const totalAmount = subtotal - discountAmount;
+    // Áp dụng giảm giá hạng thành viên
+    const [[userRow]] = await conn.query(
+      `SELECT u.member_tier, tc.discount_rate
+       FROM users u
+       LEFT JOIN tier_configs tc ON tc.tier COLLATE utf8mb4_unicode_ci = u.member_tier
+       WHERE u.id = ? LIMIT 1`,
+      [userId]
+    );
+    const tierDiscountRate = userRow ? Number(userRow.discount_rate || 0) : 0;
+    let tierDiscountAmount = 0;
+    if (tierDiscountRate > 0) {
+      tierDiscountAmount = Math.round((subtotal * (tierDiscountRate / 100)) / 1000) * 1000;
+    }
 
-    // Bước 5: Tạo booking (với voucher info)
+    const totalAmount = Math.max(0, subtotal - discountAmount - tierDiscountAmount);
+
+    // Bước 5: Tạo booking (với voucher info & tier discount)
     const [insertResult] = await conn.query(
-      `INSERT INTO bookings (user_id, showtime_id, branch_id, total_amount, status, voucher_id, discount_amount, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'pending', ?, ?, NOW(), NOW())`,
-      [userId, showtimeId, showtime.branch_id ?? null, totalAmount, voucherId, discountAmount]
+      `INSERT INTO bookings (user_id, showtime_id, branch_id, total_amount, status, voucher_id, discount_amount, tier_discount_amount, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, NOW(), NOW())`,
+      [userId, showtimeId, showtime.branch_id ?? null, totalAmount, voucherId, discountAmount, tierDiscountAmount]
     );
     const bookingId = insertResult.insertId;
 
@@ -327,7 +344,7 @@ const createBooking = async ({ userId, showtimeId, seatIds, concessions = [], vo
 //   - cash → paid ngay, sinh QR vé vào rạp
 //   - card → pending, sinh VietQR cho khách quét, chờ staff xác nhận
 // ═══════════════════════════════════════════════════════════════════════════
-const createPOSBooking = async ({ staffId, staffBranchId = null, staffRole = 'staff', showtimeId, seatIds, concessions = [], customerEmail = null, paymentMethod = 'cash' }) => {
+const createPOSBooking = async ({ staffId, staffBranchId = null, staffRole = 'staff', showtimeId, seatIds, concessions = [], customerEmail = null, paymentMethod = 'cash', customerId = null }) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -352,7 +369,31 @@ const createPOSBooking = async ({ staffId, staffBranchId = null, staffRole = 'st
     const { concessionsToAttach, concessionAmount } = await _priceConcessions(conn, concessions, showtimeBranch?.branch_id);
 
     // Bước 3: Tổng tiền
-    const totalAmount = seatAmount + concessionAmount;
+    const subtotal = seatAmount + concessionAmount;
+
+    // Áp dụng giảm giá hạng thành viên (nếu có customerId)
+    let tierDiscountAmount = 0;
+    let tierDiscountRate = 0;
+    let bookingUserId = staffId; // Mặc định là staffId (guest)
+    if (customerId) {
+      const [custRows] = await conn.query(
+        `SELECT u.id, u.member_tier, tc.discount_rate
+         FROM users u
+         LEFT JOIN tier_configs tc ON tc.tier COLLATE utf8mb4_unicode_ci = u.member_tier
+         WHERE u.id = ? AND u.role = 'customer' LIMIT 1`,
+        [customerId]
+      );
+      if (custRows.length > 0) {
+        bookingUserId = customerId;
+        tierDiscountRate = Number(custRows[0].discount_rate || 0);
+      }
+    }
+
+    if (tierDiscountRate > 0) {
+      tierDiscountAmount = Math.round((subtotal * (tierDiscountRate / 100)) / 1000) * 1000;
+    }
+
+    const totalAmount = Math.max(0, subtotal - tierDiscountAmount);
 
     const safeMethod = ['cash', 'card'].includes(paymentMethod) ? paymentMethod : 'cash';
     const isCash = safeMethod === 'cash';
@@ -361,9 +402,9 @@ const createPOSBooking = async ({ staffId, staffBranchId = null, staffRole = 'st
     //   cash → status = 'paid' ngay
     //   card → status = 'pending' (chờ staff xác nhận đã nhận tiền)
     const [result] = await conn.query(
-      `INSERT INTO bookings (user_id, showtime_id, branch_id, total_amount, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
-      [staffId, showtimeId, showtimeBranch?.branch_id ?? null, totalAmount, isCash ? 'paid' : 'pending']
+      `INSERT INTO bookings (user_id, showtime_id, branch_id, total_amount, status, tier_discount_amount, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [bookingUserId, showtimeId, showtimeBranch?.branch_id ?? null, totalAmount, isCash ? 'paid' : 'pending', tierDiscountAmount]
     );
     const bookingId = result.insertId;
 
@@ -385,11 +426,16 @@ const createPOSBooking = async ({ staffId, staffBranchId = null, staffRole = 'st
         [bookingId, totalAmount]
       );
 
+      // Tích điểm loyalty nếu có khách hàng thành viên
+      if (customerId) {
+        await LoyaltyService.onPaymentSuccess(conn, bookingUserId, bookingId, totalAmount);
+      }
+
       await conn.commit();
       console.log(`[POS] ✅ Cash — Staff #${staffId} bán vé thành công. Booking #${bookingId}`);
 
       seatIds.forEach(seatId => emitSeatStatus(showtimeId, seatId, 'booked', staffId));
-      if (customerEmail) _enqueueEmailTicket(bookingId, qrCode);
+      if (customerEmail) _enqueueEmailTicket(bookingId, qrCode, customerEmail);
 
       const bookingResult = await BookingRepository.findByIdWithDetails(bookingId);
       bookingResult.qrCode = qrCode;
@@ -446,10 +492,12 @@ const confirmPOSPayment = async ({ bookingId, staffId, customerEmail = null }) =
   try {
     await conn.beginTransaction();
 
-    // 1. Tìm booking pending — Lock row
+    // 1. Tìm booking pending + check role của user — Lock row
     const [rows] = await conn.query(
-      `SELECT id, showtime_id, user_id, total_amount, status FROM bookings
-       WHERE id = ? FOR UPDATE`,
+      `SELECT b.id, b.showtime_id, b.user_id, b.total_amount, b.status, u.role
+       FROM bookings b
+       JOIN users u ON u.id = b.user_id
+       WHERE b.id = ? FOR UPDATE`,
       [bookingId]
     );
     if (rows.length === 0) {
@@ -476,11 +524,16 @@ const confirmPOSPayment = async ({ bookingId, staffId, customerEmail = null }) =
     const qrCode = uuidv4();
     await BookingRepository.updateQrCode(conn, bookingId, qrCode);
 
+    // Tích điểm loyalty nếu booking thuộc về khách hàng thành viên
+    if (booking.role === 'customer') {
+      await LoyaltyService.onPaymentSuccess(conn, booking.user_id, bookingId, booking.total_amount);
+    }
+
     await conn.commit();
     console.log(`[POS] ✅ Staff #${staffId} xác nhận thanh toán Booking #${bookingId}`);
 
     // 5. Gửi email nếu có
-    if (customerEmail) _enqueueEmailTicket(bookingId, qrCode);
+    if (customerEmail) _enqueueEmailTicket(bookingId, qrCode, customerEmail);
 
     const bookingResult = await BookingRepository.findByIdWithDetails(bookingId);
     bookingResult.qrCode = qrCode;
@@ -601,6 +654,18 @@ const cancelBooking = async ({ bookingId, userId }) => {
   }
 };
 
+const lookupCustomer = async (query) => {
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.email, u.phone, u.member_tier, tc.discount_rate, tc.earn_rate
+     FROM users u
+     LEFT JOIN tier_configs tc ON tc.tier COLLATE utf8mb4_unicode_ci = u.member_tier
+     WHERE u.role = 'customer' AND (u.phone = ? OR u.email = ?)
+     LIMIT 1`,
+    [query, query]
+  );
+  return rows.length > 0 ? rows[0] : null;
+};
+
 export const BookingService = {
   getMyBookings,
   getBookingById,
@@ -609,4 +674,5 @@ export const BookingService = {
   confirmPOSPayment,
   cancelPOSBooking,
   cancelBooking,
+  lookupCustomer,
 };

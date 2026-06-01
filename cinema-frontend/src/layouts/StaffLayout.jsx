@@ -33,11 +33,10 @@ export default function StaffLayout() {
     { path: "/staff/pos", name: "Bán vé (POS)", icon: Monitor },
     { path: "/staff/checkin", name: "Soát vé", icon: QrCode },
   ];
-
   return (
-    <div className="flex bg-[#141414] min-h-[calc(100vh-64px)] text-gray-200 selection:bg-[#E50914] selection:text-white">
-      {/* Sidebar */}
-      <aside className="w-56 bg-[#1a1a1a] text-white shadow-2xl border-r border-[#333] flex-shrink-0 z-10">
+    <div className="flex flex-col md:flex-row bg-[#141414] min-h-[calc(100vh-64px)] text-gray-200 selection:bg-[#E50914] selection:text-white">
+      {/* Sidebar (Desktop) */}
+      <aside className="hidden md:block w-56 bg-[#1a1a1a] text-white shadow-2xl border-r border-[#333] flex-shrink-0 z-10">
         <div className="p-5 border-b border-[#333]">
           <h2 className="text-lg font-black uppercase tracking-widest flex items-center text-[#E50914]">
             <Grid className="mr-2 w-5 h-5" /> Staff Panel
@@ -73,10 +72,47 @@ export default function StaffLayout() {
         </nav>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        <Outlet />
-      </main>
+      {/* Main Container */}
+      <div className="flex-grow flex flex-col min-h-0 relative">
+        {/* Mobile Top Branch Info Bar */}
+        {branchInfo && (
+          <div className="md:hidden bg-[#1a1a1a] px-4 py-3 border-b border-[#333] flex items-center justify-between text-xs shadow-sm">
+            <div className="flex items-center gap-1.5">
+              <Grid className="w-4 h-4 text-[#E50914]" />
+              <span className="font-black text-gray-200 uppercase tracking-wider">Staff Panel</span>
+            </div>
+            <div className="flex items-center gap-1 text-gray-400">
+              <MapPin className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+              <span className="font-black text-[#E50914]">{branchInfo.name}</span>
+              <span className="text-gray-500">({branchInfo.city})</span>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <main className="flex-grow overflow-auto pb-20 md:pb-0">
+          <Outlet />
+        </main>
+      </div>
+
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#1a1a1a]/95 backdrop-blur-md border-t border-[#333] flex justify-around items-center h-16 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            end={item.end}
+            className={({ isActive }) =>
+              `flex flex-col items-center justify-center flex-grow h-full py-1 text-[11px] font-bold transition-all ${
+                isActive ? "text-[#E50914] scale-105" : "text-gray-400 hover:text-white"
+              }`
+            }
+          >
+            <item.icon className="w-5 h-5 mb-0.5" />
+            <span>{item.name}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   );
 }

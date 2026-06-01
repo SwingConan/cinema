@@ -10,7 +10,7 @@ const getOverview = async (startDate, endDate) => {
   const [[revenueRow]] = await pool.query(
     `SELECT COALESCE(SUM(total_amount), 0) AS total_revenue
      FROM bookings
-     WHERE status = 'paid' AND created_at BETWEEN ? AND ?`,
+     WHERE status IN ('paid', 'used') AND created_at BETWEEN ? AND ?`,
     [startDate, endDate]
   );
 
@@ -18,7 +18,7 @@ const getOverview = async (startDate, endDate) => {
     `SELECT COUNT(bs.id) AS total_tickets
      FROM booking_seats bs
      JOIN bookings b ON bs.booking_id = b.id
-     WHERE b.status = 'paid' AND b.created_at BETWEEN ? AND ?`,
+     WHERE b.status IN ('paid', 'used') AND b.created_at BETWEEN ? AND ?`,
     [startDate, endDate]
   );
 
@@ -26,7 +26,7 @@ const getOverview = async (startDate, endDate) => {
   const [[monthRow]] = await pool.query(
     `SELECT COALESCE(SUM(total_amount), 0) AS current_month_revenue
      FROM bookings
-     WHERE status = 'paid'
+     WHERE status IN ('paid', 'used')
        AND MONTH(created_at) = MONTH(NOW())
        AND YEAR(created_at) = YEAR(NOW())`
   );
@@ -50,7 +50,7 @@ const getRevenueChart = async (startDate, endDate) => {
   const [rows] = await pool.query(
     `SELECT DATE(created_at) AS date, SUM(total_amount) AS revenue
      FROM bookings
-     WHERE status = 'paid' AND created_at BETWEEN ? AND ?
+     WHERE status IN ('paid', 'used') AND created_at BETWEEN ? AND ?
      GROUP BY DATE(created_at)
      ORDER BY date ASC`,
     [startDate, endDate]
@@ -65,7 +65,7 @@ const getTopMovies = async (startDate, endDate) => {
      FROM movies m
      LEFT JOIN showtimes s ON m.id = s.movie_id
      LEFT JOIN bookings b ON s.id = b.showtime_id
-       AND b.status = 'paid'
+       AND b.status IN ('paid', 'used')
        AND b.created_at BETWEEN ? AND ?
      GROUP BY m.id, m.title
      ORDER BY total_revenue DESC
@@ -85,7 +85,7 @@ const getRecentBookings = async (startDate, endDate) => {
      JOIN users u ON b.user_id = u.id
      JOIN showtimes s ON b.showtime_id = s.id
      JOIN movies m ON s.movie_id = m.id
-     WHERE b.status = 'paid' AND b.created_at BETWEEN ? AND ?
+     WHERE b.status IN ('paid', 'used') AND b.created_at BETWEEN ? AND ?
      ORDER BY b.created_at DESC`,
     [startDate, endDate]
   );

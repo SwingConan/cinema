@@ -70,13 +70,23 @@ function ConcessionModal({ item, onClose, onSaved }) {
     name:        item.name        ?? "",
     description: item.description ?? "",
     price:       item.price       ?? "",
-    image:       item.image       ?? "",
+    image:       (item.image && item.image !== "[object Object]") ? item.image : "",
     isActive:    item.isActive    ?? true,
   } : { ...EMPTY_FORM });
+  const [imageFile, setImageFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(form.image ? (form.image.startsWith('http') ? form.image : `/uploads/${form.image}`) : "");
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImageFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -86,11 +96,25 @@ function ConcessionModal({ item, onClose, onSaved }) {
     }
     setSaving(true); setError("");
     try {
-      const payload = { ...form, price: Number(form.price) };
-      if (isEdit) {
-        await api.put(`/admin/concessions/${item.id}`, payload);
+      const formData = new FormData();
+      formData.append("name", form.name);
+      formData.append("description", form.description);
+      formData.append("price", Number(form.price));
+      formData.append("isActive", form.isActive);
+      if (imageFile) {
+        formData.append("image", imageFile);
       } else {
-        await api.post("/admin/concessions", payload);
+        formData.append("image", form.image || "");
+      }
+
+      if (isEdit) {
+        await api.put(`/admin/concessions/${item.id}`, formData, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+      } else {
+        await api.post("/admin/concessions", formData, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
       }
       onSaved();
     } catch (err) {
@@ -128,9 +152,9 @@ function ConcessionModal({ item, onClose, onSaved }) {
           )}
 
           {/* Preview image */}
-          {form.image && (
+          {previewUrl && (
             <div className="flex justify-center">
-              <img src={form.image} alt="preview"
+              <img src={previewUrl} alt="preview"
                 onError={e => { e.target.style.display = "none"; }}
                 className="h-28 w-28 object-cover rounded-2xl border border-[#333]" />
             </div>
@@ -183,17 +207,24 @@ function ConcessionModal({ item, onClose, onSaved }) {
               </div>
             </div>
 
-            {/* URL ảnh */}
+            {/* Tải ảnh lên */}
             <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                URL Hình ảnh
+                Hình ảnh món ăn / thức uống
               </label>
-              <input
-                type="url" value={form.image}
-                onChange={e => set("image", e.target.value)}
-                placeholder="https://example.com/image.jpg"
-                className="w-full bg-[#111] border border-[#333] focus:border-[#E50914] text-white rounded-xl px-4 py-2.5 text-sm outline-none transition-colors placeholder:text-gray-700"
-              />
+              <div className="relative group/upload border-2 border-dashed border-[#333] hover:border-[#E50914]/50 rounded-xl p-4 transition-colors flex flex-col items-center justify-center bg-[#111] cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <Plus size={20} className="text-gray-500 group-hover/upload:text-[#E50914] transition-colors mb-1" />
+                <span className="text-xs text-gray-400 font-bold group-hover/upload:text-white transition-colors">
+                  {imageFile ? imageFile.name : (form.image ? "Thay đổi ảnh..." : "Chọn ảnh từ máy tính...")}
+                </span>
+                <span className="text-[10px] text-gray-600 mt-1">Định dạng JPG, PNG, WEBP tối đa 5MB</span>
+              </div>
             </div>
 
             {/* Mô tả */}
@@ -419,7 +450,7 @@ export default function ManageConcessions() {
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-xl overflow-hidden bg-[#222] border border-[#2a2a2a] shrink-0 flex items-center justify-center">
                           {item.image ? (
-                            <img src={item.image} alt={item.name}
+                            <img src={item.image.startsWith('http') ? item.image : `/uploads/${item.image}`} alt={item.name}
                               onError={e => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }}
                               className="w-full h-full object-cover" />
                           ) : null}

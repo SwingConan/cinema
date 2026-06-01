@@ -396,6 +396,8 @@ export function buildPremiumTicketData({ booking, branchInfo = null, fallbackSho
     seats: normalizeSeats(booking?.seats),
     concessions: normalizeConcessions(booking?.concessions),
     totalAmount: booking?.totalAmount ?? booking?.total_amount ?? 0,
+    tierDiscountAmount: booking?.tierDiscountAmount ?? booking?.tier_discount_amount ?? 0,
+    discountAmount: booking?.discountAmount ?? booking?.discount_amount ?? 0,
     paymentMethod: booking?.paymentMethod ?? booking?.payment_method ?? paymentMethod,
   };
 }
@@ -452,6 +454,24 @@ export function TicketPaper({ ticket, id }) {
                 <strong className="concession-price">{formatCurrency(item.price * item.quantity)}</strong>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Discount Details if any */}
+        {(Number(ticket.tierDiscountAmount) > 0 || Number(ticket.discountAmount) > 0) && (
+          <div style={{ borderTop: "1px dashed #ccc", paddingTop: "8px", margin: "12px 0 6px 0", fontSize: "11px", color: "#333", display: "flex", flexDirection: "column", gap: "4px" }}>
+            {Number(ticket.discountAmount) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Khuyến mãi Voucher:</span>
+                <strong>-{formatCurrency(ticket.discountAmount)}</strong>
+              </div>
+            )}
+            {Number(ticket.tierDiscountAmount) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Giảm giá Hạng TV:</span>
+                <strong>-{formatCurrency(ticket.tierDiscountAmount)}</strong>
+              </div>
+            )}
           </div>
         )}
 

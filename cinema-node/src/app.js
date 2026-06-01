@@ -84,17 +84,27 @@ const bookingLimiter = rateLimit({
 });
 
 // ── GLOBAL MIDDLEWARE ──────────────────────────────────────────────
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'http://localhost',
-  'http://localhost:5174',
-].filter(Boolean);
+// Dynamic CORS: cho phép localhost (mọi port), ngrok domains, và FRONTEND_URL
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // same-origin / server-to-server
+  try {
+    const url = new URL(origin);
+    // localhost hoặc 127.0.0.1 (mọi port)
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
+    // Ngrok tunnel domains
+    if (url.hostname.endsWith('.ngrok-free.dev') || url.hostname.endsWith('.ngrok.io')) return true;
+    // FRONTEND_URL trong .env
+    if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) return true;
+  } catch { /* invalid URL → reject */ }
+  return false;
+}
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
+      console.warn(`[CORS] Blocked origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },

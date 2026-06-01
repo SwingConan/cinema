@@ -7,6 +7,8 @@ const mapBooking = (r) => ({
   showtimeId: r.showtime_id,
   branchId: r.branch_id ?? null,
   totalAmount: r.total_amount,
+  discountAmount: r.discount_amount ?? 0,
+  tierDiscountAmount: r.tier_discount_amount ?? 0,
   status: r.status,
   qrCode: r.qr_code,
   createdAt: r.created_at,

@@ -42,6 +42,7 @@ const posStore = async (req, res) => {
       concessions:   req.body.concessions || [],
       customerEmail: req.body.customer_email || null,
       paymentMethod: req.body.payment_method || 'cash',
+      customerId:    req.body.customer_id || null,
     });
     AuditService.logAction(req, 'booking.pos_create', { entityType: 'booking', entityId: booking.id, details: { showtimeId: req.body.showtime_id, seats: req.body.seat_ids, method: req.body.payment_method } });
     res.status(201).json(booking);
@@ -123,4 +124,19 @@ const cancel = async (req, res) => {
   } catch (e) { res.status(e.status || 500).json({ message: e.message }); }
 };
 
-export const BookingController = { index, show, store, getVietQR, posStore, posConfirm, posCancel, cancel };
+// GET /api/staff/pos/customer-lookup — Tra cứu khách hàng bằng SĐT hoặc Email
+const customerLookup = async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query) {
+      return res.status(400).json({ message: 'Vui lòng cung cấp SĐT hoặc Email.' });
+    }
+    const customer = await BookingService.lookupCustomer(query);
+    if (!customer) {
+      return res.json({ found: false });
+    }
+    res.json({ found: true, customer });
+  } catch (e) { res.status(e.status || 500).json({ message: e.message }); }
+};
+
+export const BookingController = { index, show, store, getVietQR, posStore, posConfirm, posCancel, cancel, customerLookup };

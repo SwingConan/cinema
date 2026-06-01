@@ -33,6 +33,7 @@ import MovieDetailPage from "./pages/customer/MovieDetailPage";
 import BookingPage from "./pages/customer/BookingPage";
 import PaymentResultPage from "./pages/customer/PaymentResultPage";
 import ProfilePage from "./pages/customer/ProfilePage";
+import PromotionsPage from "./pages/customer/PromotionsPage";
 
 import StaffDashboard from "./pages/staff/StaffDashboard";
 import StaffOverview from "./pages/staff/StaffOverview";
@@ -83,6 +84,7 @@ function App() {
             <Route path="movies/:id" element={<MovieDetailPage />} />
             <Route path="booking/:showtimeId" element={<BookingPage />} />
             <Route path="payment-result" element={<PaymentResultPage />} />
+            <Route path="promotions" element={<PromotionsPage />} />
 
             {/* Protected Customer Routes */}
             <Route

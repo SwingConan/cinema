@@ -32,12 +32,12 @@ const getActionMeta = (action) => actionMeta[action] || {
 
 const fmtDateTime = (d) => {
   if (!d) return "—";
-  const str = String(d).replace("Z", "").replace("T", " ");
-  return new Date(str).toLocaleString("vi-VN", {
+  return new Date(d).toLocaleString("vi-VN", {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
 };
+
 
 const truncateUA = (ua, max = 60) => {
   if (!ua) return "—";

@@ -22,10 +22,27 @@ const PORT = process.env.PORT || 8000;
 // Tạo HTTP server từ Express app
 const httpServer = createServer(app);
 
-// Khởi tạo Socket.io với CORS cho Frontend
+// Khởi tạo Socket.io với CORS động (cho phép localhost, ngrok, FRONTEND_URL)
+function isAllowedSocketOrigin(origin) {
+  if (!origin) return true;
+  try {
+    const url = new URL(origin);
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
+    if (url.hostname.endsWith('.ngrok-free.dev') || url.hostname.endsWith('.ngrok.io')) return true;
+    if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) return true;
+  } catch { /* reject */ }
+  return false;
+}
+
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5174',
+    origin: (origin, callback) => {
+      if (isAllowedSocketOrigin(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Socket.io CORS blocked'));
+      }
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },

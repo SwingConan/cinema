@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { ConcessionController } from './concession.controller.js';
 import { authenticate } from '../../middlewares/auth.middleware.js';
 import { authorize } from '../../middlewares/role.middleware.js';
+import { upload } from '../../config/multer.js';
 
 const router = Router();
 
@@ -16,9 +17,9 @@ router.get('/public/concessions', ConcessionController.index);
 // ── ADMIN ONLY: CRUD đầy đủ ───────────────────────────────────────────────
 router.get('/admin/concessions',      authenticate, authorize('admin'), ConcessionController.adminIndex);
 router.get('/admin/concessions/:id',  authenticate, authorize('admin'), ConcessionController.show);
-router.post('/admin/concessions',     authenticate, authorize('admin'), ConcessionController.store);
+router.post('/admin/concessions',     authenticate, authorize('admin'), upload.single('image'), ConcessionController.store);
 router.put('/admin/concessions/:id/branches/:branchId/inventory', authenticate, authorize('admin'), ConcessionController.updateInventory);
-router.put('/admin/concessions/:id',  authenticate, authorize('admin'), ConcessionController.update);
+router.put('/admin/concessions/:id',  authenticate, authorize('admin'), upload.single('image'), ConcessionController.update);
 router.delete('/admin/concessions/:id', authenticate, authorize('admin'), ConcessionController.destroy);
 
 export default router;

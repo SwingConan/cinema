@@ -43,6 +43,12 @@ const fmtDatetime = (val) => {
   return isNaN(d) ? String(val) : d.toLocaleString("vi-VN");
 };
 
+const fmtAbsoluteDatetime = (val) => {
+  if (!val) return "—";
+  const d = new Date(val);
+  return isNaN(d) ? String(val) : d.toLocaleString("vi-VN");
+};
+
 // ── StatusBadge ───────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
   const map = {
@@ -67,12 +73,22 @@ function TicketCard({ booking, onResumePayment, onCancelBooking, loadingQR, onZo
   const isPaid    = booking.status === "paid";
   const isPending = booking.status === "pending";
 
-  // Countdown logic for pending
-  const minutesPassed = isPending
-    ? (Date.now() - new Date(booking.createdAt ?? booking.created_at).getTime()) / 60000
-    : 0;
-  const isExpired   = isPending && minutesPassed >= 10;
-  const minutesLeft = isPending ? Math.max(0, Math.ceil(10 - minutesPassed)) : 0;
+  const [timeLeft, setTimeLeft] = useState(10);
+
+  useEffect(() => {
+    if (!isPending) return;
+    const updateTime = () => {
+      const created = new Date(booking.createdAt ?? booking.created_at).getTime();
+      const passed = (Date.now() - created) / 60000;
+      setTimeLeft(Math.max(0, Math.ceil(10 - passed)));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 10000);
+    return () => clearInterval(interval);
+  }, [isPending, booking.createdAt, booking.created_at]);
+
+  const isExpired   = isPending && timeLeft <= 0;
+  const minutesLeft = isPending ? timeLeft : 0;
 
   // Gradient per status
   const borderGlow = isPaid
@@ -92,7 +108,7 @@ function TicketCard({ booking, onResumePayment, onCancelBooking, loadingQR, onZo
         </span>
         <div className="flex items-center gap-3">
           <span className="text-gray-500 text-xs">
-            {fmtDatetime(booking.createdAt ?? booking.created_at)}
+            {fmtAbsoluteDatetime(booking.createdAt ?? booking.created_at)}
           </span>
           <StatusBadge status={booking.status} />
         </div>
@@ -105,7 +121,7 @@ function TicketCard({ booking, onResumePayment, onCancelBooking, loadingQR, onZo
         <div className="w-24 flex-shrink-0 relative overflow-hidden bg-black">
           {booking.showtime?.movie?.poster ? (
             <img
-              src={`http://localhost:8000/uploads/${booking.showtime.movie.poster}`}
+              src={`/uploads/${booking.showtime.movie.poster}`}
               alt="poster"
               className="absolute inset-0 w-full h-full object-cover opacity-90"
             />
@@ -240,10 +256,11 @@ function TicketCard({ booking, onResumePayment, onCancelBooking, loadingQR, onZo
 }
 
 // ── EmptySlot ─────────────────────────────────────────────────────────────────
-function EmptySlot({ icon: Icon, msg, sub }) {
+function EmptySlot({ icon, msg, sub }) {
+  const IconComponent = icon;
   return (
     <div className="py-14 text-center flex flex-col items-center gap-3 border border-dashed border-[#333] rounded-2xl bg-[#111]/50">
-      <Icon className="w-12 h-12 text-gray-700" />
+      {IconComponent && <IconComponent className="w-12 h-12 text-gray-700" />}
       <p className="text-white font-bold">{msg}</p>
       <p className="text-gray-500 text-sm">{sub}</p>
     </div>
@@ -281,7 +298,11 @@ function VoucherList({ vouchers, loading, onCopy }) {
               <p className="text-xs text-gray-500 mt-1">Hạn dùng: {fmtDatetime(voucher.validTo)}</p>
             </div>
             <div className="text-left sm:text-right">
-              <p className="text-emerald-400 font-black text-lg">-{fmtCurrency(voucher.discountValue)}</p>
+              <p className="text-emerald-400 font-black text-lg">
+                {voucher.discountType === "percentage"
+                  ? `-${voucher.discountValue}%`
+                  : `-${fmtCurrency(voucher.discountValue)}`}
+              </p>
               <span className={`inline-flex mt-1 rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-wider ${
                 voucher.status === "used"
                   ? "border-blue-800/60 bg-blue-900/30 text-blue-400"
@@ -389,7 +410,7 @@ function ProfilePageContent() {
   useEffect(() => {
     if (activeTab === "history") fetchBookings();
     if (activeTab === "security") fetchPasscodeStatus();
-    if (activeTab === "membership") fetchMyVouchers();
+    if (activeTab === "vouchers") fetchMyVouchers();
   }, [activeTab, fetchPasscodeStatus, fetchMyVouchers]);
 
   const copyVoucherCode = async (code) => {
@@ -612,6 +633,12 @@ function ProfilePageContent() {
                   <Crown className="w-4 h-4 mr-2.5 flex-shrink-0" /> Thành viên
                 </button>
                 <button
+                  onClick={() => setActiveTab("vouchers")}
+                  className={`w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === "vouchers" ? "bg-[#E50914] text-white" : "text-gray-400 hover:bg-[#222] hover:text-white"}`}
+                >
+                  <Tag className="w-4 h-4 mr-2.5 flex-shrink-0" /> Voucher của tôi
+                </button>
+                <button
                   onClick={() => setActiveTab("security")}
                   className={`w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-bold transition-colors ${activeTab === "security" ? "bg-[#E50914] text-white" : "text-gray-400 hover:bg-[#222] hover:text-white"}`}
                 >
@@ -748,6 +775,20 @@ function ProfilePageContent() {
                   <Crown className="mr-2 text-yellow-500" /> Thành Viên & Tích Điểm
                 </h2>
                 <MembershipCard onRedeemed={fetchMyVouchers} />
+              </div>
+            )}
+
+            {activeTab === "vouchers" && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-black text-white flex items-center uppercase tracking-wider">
+                    <Tag className="mr-2 text-[#E50914]" /> Voucher Của Tôi
+                  </h2>
+                  <button onClick={fetchMyVouchers}
+                    className="text-xs text-gray-500 hover:text-white font-bold transition-colors uppercase tracking-wider">
+                    ↻ Làm mới
+                  </button>
+                </div>
                 <VoucherList vouchers={myVouchers} loading={loadingVouchers} onCopy={copyVoucherCode} />
               </div>
             )}

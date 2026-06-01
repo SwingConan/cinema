@@ -73,88 +73,112 @@ export const sendTicketEmail = async (toEmail, qrCodeStr, ticket) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vé Xem Phim #${bookingId}</title>
 </head>
-<body style="margin:0;padding:0;background:#111;font-family:'Segoe UI',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#111;padding:40px 0;">
+<body style="margin:0;padding:0;background:#0d0d0d;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0d0d0d;padding:40px 0;">
     <tr>
       <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="background:#1a1a1a;border-radius:12px;overflow:hidden;border:1px solid #333;">
-
+        <!-- Main ticket box -->
+        <table width="520" cellpadding="0" cellspacing="0" style="background:#151515;border-radius:24px;overflow:hidden;border:1px solid #262626;box-shadow:0 20px 40px rgba(0,0,0,0.5);">
+          
           <!-- HEADER -->
           <tr>
-            <td style="background:linear-gradient(135deg,#E50914,#b81d24);padding:32px 40px;text-align:center;">
-              <h1 style="color:#fff;margin:0;font-size:28px;font-weight:900;letter-spacing:-0.5px;">🎬 CINEMA</h1>
-              <p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:14px;">Vé Điện Tử Xem Phim</p>
+            <td style="background:linear-gradient(135deg,#E50914 0%,#8B0000 100%);padding:40px;text-align:center;">
+              <div style="font-size:26px;font-weight:900;color:#ffffff;letter-spacing:1px;text-transform:uppercase;margin:0;">
+                🎬 CINEMA TICKET
+              </div>
+              <div style="color:rgba(255,255,255,0.7);font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;margin-top:6px;">
+                Vé Điện Tử / E-Ticket
+              </div>
             </td>
           </tr>
 
-          <!-- BOOKING ID BADGE -->
+          <!-- TICKET TOP BODY: INFO -->
           <tr>
-            <td style="padding:24px 40px 0;text-align:center;">
-              <span style="background:#222;border:1px solid #E50914;color:#E50914;padding:6px 20px;border-radius:999px;font-size:13px;font-weight:700;letter-spacing:1px;">
-                ĐƠN VÉ #${bookingId}
-              </span>
-            </td>
-          </tr>
+            <td style="padding:40px 40px 10px;">
+              <!-- Booking ID Badge -->
+              <div style="text-align:center;margin-bottom:30px;">
+                <span style="background:rgba(229,9,20,0.1);border:1px solid rgba(229,9,20,0.3);color:#E50914;padding:8px 24px;border-radius:100px;font-size:12px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;display:inline-block;">
+                  MÃ ĐƠN VÉ #${bookingId}
+                </span>
+              </div>
 
-          <!-- MOVIE INFO -->
-          <tr>
-            <td style="padding:28px 40px 0;">
-              <h2 style="color:#fff;margin:0 0 20px;font-size:22px;font-weight:900;border-left:4px solid #E50914;padding-left:12px;">
+              <!-- Movie Title -->
+              <h2 style="color:#ffffff;margin:0 0 25px 0;font-size:22px;font-weight:900;line-height:1.4;text-align:center;">
                 ${movieTitle}
               </h2>
-              <table width="100%" cellpadding="0" cellspacing="0">
+
+              <!-- Details Grid -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
                 <tr>
-                  <td style="padding:10px 0;border-bottom:1px solid #2a2a2a;">
-                    <span style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Suất chiếu</span><br>
-                    <span style="color:#eee;font-size:15px;font-weight:600;margin-top:4px;display:block;">${formattedTime}</span>
+                  <td width="50%" style="padding:15px 0;border-bottom:1px solid #222;vertical-align:top;">
+                    <div style="color:#737373;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Lịch Chiếu</div>
+                    <div style="color:#ffffff;font-size:14px;font-weight:700;line-height:1.4;">${formattedTime}</div>
+                  </td>
+                  <td width="50%" style="padding:15px 0 15px 20px;border-bottom:1px solid #222;vertical-align:top;">
+                    <div style="color:#737373;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Phòng Chiếu</div>
+                    <div style="color:#ffffff;font-size:14px;font-weight:700;line-height:1.4;">${roomName} <span style="color:#E50914;font-size:11px;padding:2px 6px;background:rgba(229,9,20,0.15);border-radius:4px;margin-left:4px;">${roomType}</span></div>
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding:10px 0;border-bottom:1px solid #2a2a2a;">
-                    <span style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Phòng chiếu</span><br>
-                    <span style="color:#eee;font-size:15px;font-weight:600;margin-top:4px;display:block;">${roomName} &mdash; ${roomType}</span>
+                  <td width="50%" style="padding:15px 0;vertical-align:top;">
+                    <div style="color:#737373;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Ghế Đã Chọn</div>
+                    <div style="color:#E50914;font-size:18px;font-weight:900;letter-spacing:1px;">${seatNames}</div>
                   </td>
-                </tr>
-                <tr>
-                  <td style="padding:10px 0;border-bottom:1px solid #2a2a2a;">
-                    <span style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Ghế ngồi</span><br>
-                    <span style="color:#E50914;font-size:18px;font-weight:900;margin-top:4px;display:block;letter-spacing:1px;">${seatNames}</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:10px 0;">
-                    <span style="color:#666;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Tổng tiền</span><br>
-                    <span style="color:#f5c842;font-size:18px;font-weight:900;margin-top:4px;display:block;">${formattedAmount}</span>
+                  <td width="50%" style="padding:15px 0 15px 20px;vertical-align:top;">
+                    <div style="color:#737373;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Tổng Thanh Toán</div>
+                    <div style="color:#f5c842;font-size:16px;font-weight:900;">${formattedAmount}</div>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
 
-          <!-- DASHED DIVIDER -->
+          <!-- TICKET DIVIDER WITH NOTCHES -->
           <tr>
-            <td style="padding:24px 40px;">
-              <div style="border-top:2px dashed #333;position:relative;">
-                <div style="position:absolute;left:-50px;top:-12px;width:24px;height:24px;background:#111;border-radius:50%;border:1px solid #333;"></div>
-                <div style="position:absolute;right:-50px;top:-12px;width:24px;height:24px;background:#111;border-radius:50%;border:1px solid #333;"></div>
+            <td>
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                <tr>
+                  <!-- Left Notch -->
+                  <td width="16" style="height:32px;background:#0d0d0d;border-radius:0 16px 16px 0;border:1px solid #262626;border-left:none;"></td>
+                  <!-- Dashed line -->
+                  <td style="border-bottom:2px dashed #262626;height:16px;line-height:16px;">&nbsp;</td>
+                  <!-- Right Notch -->
+                  <td width="16" style="height:32px;background:#0d0d0d;border-radius:16px 0 0 16px;border:1px solid #262626;border-right:none;"></td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- TICKET BOTTOM BODY: QR CODE -->
+          <tr>
+            <td style="padding:30px 40px 40px;text-align:center;">
+              <div style="color:#737373;font-size:12px;font-weight:bold;margin-bottom:20px;letter-spacing:1px;">
+                VUI LÒNG QUÉT MÃ QR NÀY TẠI QUẦY ĐỂ NHẬN VÉ
+              </div>
+              
+              <!-- QR Frame -->
+              <div style="background:#ffffff;padding:16px;border-radius:16px;display:inline-block;box-shadow:0 10px 25px rgba(0,0,0,0.3);border:1px solid #e5e5e5;">
+                <img src="cid:qrcode_ticket" alt="Mã QR Vé Xem Phim" style="width:200px;height:200px;display:block;margin:0;">
+              </div>
+              
+              <!-- Unique QR code text -->
+              <div style="color:#525252;font-family:'Courier New',Courier,monospace;font-size:11px;margin-top:16px;word-break:break-all;letter-spacing:0.5px;">
+                ${qrCodeStr}
               </div>
             </td>
           </tr>
 
-          <!-- QR CODE SECTION -->
+          <!-- FOOTER/NOTE -->
           <tr>
-            <td style="padding:0 40px 32px;text-align:center;">
-              <p style="color:#888;font-size:13px;margin:0 0 16px;">Xuất trình mã QR này tại cửa rạp</p>
-              <img src="cid:qrcode_ticket" alt="QR Code" style="width:200px;height:200px;border:8px solid #fff;border-radius:8px;display:block;margin:0 auto;">
-              <p style="color:#444;font-size:11px;margin:12px 0 0;font-family:monospace;word-break:break-all;">${qrCodeStr}</p>
-            </td>
-          </tr>
-
-          <!-- FOOTER -->
-          <tr>
-            <td style="background:#0d0d0d;padding:20px 40px;text-align:center;border-top:1px solid #222;">
-              <p style="color:#444;font-size:12px;margin:0;">Vui lòng đến trước giờ chiếu ít nhất 15 phút. Vé đã mua không hoàn tiền.</p>
-              <p style="color:#333;font-size:11px;margin:8px 0 0;">&copy; ${new Date().getFullYear()} Cinema Management System</p>
+            <td style="background:#0c0c0c;padding:24px 40px;text-align:center;border-top:1px solid #222;">
+              <div style="color:#525252;font-size:12px;line-height:1.6;font-weight:500;">
+                Vui lòng đến rạp trước giờ chiếu ít nhất 15 phút để chuẩn bị.
+                <br>
+                Vé đã thanh toán không được hoàn trả hoặc đổi trả.
+              </div>
+              <div style="color:#404040;font-size:10px;margin-top:12px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">
+                &copy; ${new Date().getFullYear()} Cinema Management System
+              </div>
             </td>
           </tr>
 

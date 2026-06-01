@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import api from "../../utils/api";
 import {
@@ -13,6 +13,8 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 export default function VoiceBookingAssistant() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isBookingPage = location.pathname.startsWith("/booking");
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -139,7 +141,7 @@ export default function VoiceBookingAssistant() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-gradient-to-br from-[#E50914] to-[#b81d24] rounded-full shadow-2xl shadow-red-900/50 flex items-center justify-center hover:scale-110 transition-transform group"
+          className={`fixed ${isBookingPage ? "bottom-32" : "bottom-20"} right-4 sm:bottom-6 sm:right-6 z-50 w-14 h-14 bg-gradient-to-br from-[#E50914] to-[#b81d24] rounded-full shadow-2xl shadow-red-900/50 flex items-center justify-center hover:scale-110 transition-transform group cursor-pointer`}
           title="Trợ lý đặt vé AI"
         >
           <MessageCircle className="w-6 h-6 text-white" />

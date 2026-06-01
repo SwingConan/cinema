@@ -20,6 +20,8 @@ export default function VouchersPage() {
   const [form, setForm] = useState({ ...emptyVoucher });
   const [showForm, setShowForm] = useState(false);
   const [selectedBranchFilter, setSelectedBranchFilter] = useState("");
+  const [distribution, setDistribution] = useState({ voucherId: null, target: "all", targetTier: "bronze", targetUserId: "" });
+  const [distributing, setDistributing] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -29,7 +31,7 @@ export default function VouchersPage() {
       ]);
       setVouchers(voucherRes.data);
       setBranches(Array.isArray(branchRes.data) ? branchRes.data : (branchRes.data?.data ?? []));
-    } catch (e) { toast.error("Lỗi tải dữ liệu"); }
+    } catch { toast.error("Lỗi tải dữ liệu"); }
     finally { setLoading(false); }
   };
 
@@ -66,12 +68,36 @@ export default function VouchersPage() {
     try {
       await api.delete(`/admin/vouchers/${id}`);
       toast.success("Đã xóa"); fetchData();
-    } catch (e) { toast.error("Lỗi xóa"); }
+    } catch { toast.error("Lỗi xóa"); }
   };
 
   const copyCode = (code) => {
     navigator.clipboard.writeText(code);
     toast.success(`Đã copy: ${code}`);
+  };
+
+  const handleDistribute = async () => {
+    if (!distribution.voucherId) return;
+    if (distribution.target === "specific" && !distribution.targetUserId) {
+      return toast.error("Vui lòng nhập ID khách hàng");
+    }
+
+    setDistributing(true);
+    try {
+      const payload = {
+        target: distribution.target,
+        targetTier: distribution.target === "tier" ? distribution.targetTier : null,
+        targetUserId: distribution.target === "specific" ? Number(distribution.targetUserId) : null,
+      };
+      const res = await api.post(`/admin/vouchers/${distribution.voucherId}/distribute`, payload);
+      toast.success(`Đã phân phối ${res.data.count} voucher${res.data.skipped ? `, bỏ qua ${res.data.skipped} mã trùng` : ""}`);
+      setDistribution({ voucherId: null, target: "all", targetTier: "bronze", targetUserId: "" });
+      fetchData();
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Không thể phân phối voucher");
+    } finally {
+      setDistributing(false);
+    }
   };
 
   const formatMoney = (v) => Number(v).toLocaleString("vi-VN") + "đ";
@@ -286,38 +312,101 @@ export default function VouchersPage() {
                     <span>{formatMoney(v.minOrder)}</span>
                   </div>
                 )}
-                {/* Status badges */}
-                <div className="flex items-center gap-2 pt-2">
-                  {v.isActive && !isExpired && !isUpcoming && (
-                    <span className="px-2 py-0.5 bg-green-900/30 text-green-400 rounded-full text-xs font-bold flex items-center gap-1">
-                      <CheckCircle size={12} /> Đang hoạt động
-                    </span>
-                  )}
-                  {isExpired && (
-                    <span className="px-2 py-0.5 bg-red-900/30 text-red-400 rounded-full text-xs font-bold flex items-center gap-1">
-                      <XCircle size={12} /> Hết hạn
-                    </span>
-                  )}
-                  {isUpcoming && (
-                    <span className="px-2 py-0.5 bg-blue-900/30 text-blue-400 rounded-full text-xs font-bold">
-                      Sắp diễn ra
-                    </span>
-                  )}
-                  {!v.isActive && (
-                    <span className="px-2 py-0.5 bg-gray-900/30 text-gray-400 rounded-full text-xs font-bold">Đã tắt</span>
-                  )}
+                {/* Status badges & Actions */}
+                <div className="flex items-center justify-between pt-2 border-t border-[#333]/30 mt-2">
+                  <div className="flex items-center gap-2">
+                    {v.isActive && !isExpired && !isUpcoming && (
+                      <span className="px-2 py-0.5 bg-green-900/30 text-green-400 rounded-full text-xs font-bold flex items-center gap-1">
+                        <CheckCircle size={12} /> Đang hoạt động
+                      </span>
+                    )}
+                    {isExpired && (
+                      <span className="px-2 py-0.5 bg-red-900/30 text-red-400 rounded-full text-xs font-bold flex items-center gap-1">
+                        <XCircle size={12} /> Hết hạn
+                      </span>
+                    )}
+                    {isUpcoming && (
+                      <span className="px-2 py-0.5 bg-blue-900/30 text-blue-400 rounded-full text-xs font-bold">
+                        Sắp diễn ra
+                      </span>
+                    )}
+                    {!v.isActive && (
+                      <span className="px-2 py-0.5 bg-gray-900/30 text-gray-400 rounded-full text-xs font-bold">Đã tắt</span>
+                    )}
+                  </div>
+                  
+                  {/* Actions */}
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setDistribution({ voucherId: v.id, target: "all", targetTier: "bronze", targetUserId: "" })}
+                      className="p-1.5 rounded-lg hover:bg-[#333] text-gray-400 hover:text-white transition-colors"
+                      title="Phân phối"
+                    >
+                      <Users size={15} />
+                    </button>
+                    <button onClick={() => handleEdit(v)} className="p-1.5 rounded-lg hover:bg-[#333] text-gray-400 hover:text-white transition-colors" title="Sửa">
+                      <Edit2 size={15} />
+                    </button>
+                    <button onClick={() => handleDelete(v.id)} className="p-1.5 rounded-lg hover:bg-red-900/30 text-gray-400 hover:text-red-400 transition-colors" title="Xóa">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
+
+                {distribution.voucherId === v.id && (
+                  <div className="mt-4 rounded-xl border border-[#333] bg-black/30 p-3 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <select
+                        value={distribution.target}
+                        onChange={(e) => setDistribution({ ...distribution, target: e.target.value })}
+                        className="bg-[#222] border border-[#444] rounded-lg px-3 py-2 text-sm text-white"
+                      >
+                        <option value="all">Tất cả khách hàng</option>
+                        <option value="tier">Theo hạng thẻ</option>
+                        <option value="specific">Một khách hàng</option>
+                      </select>
+                      {distribution.target === "tier" && (
+                        <select
+                          value={distribution.targetTier}
+                          onChange={(e) => setDistribution({ ...distribution, targetTier: e.target.value })}
+                          className="bg-[#222] border border-[#444] rounded-lg px-3 py-2 text-sm text-white"
+                        >
+                          <option value="bronze">Bronze</option>
+                          <option value="silver">Silver</option>
+                          <option value="gold">Gold</option>
+                          <option value="platinum">Platinum</option>
+                        </select>
+                      )}
+                      {distribution.target === "specific" && (
+                        <input
+                          type="number"
+                          value={distribution.targetUserId}
+                          onChange={(e) => setDistribution({ ...distribution, targetUserId: e.target.value })}
+                          placeholder="User ID"
+                          className="bg-[#222] border border-[#444] rounded-lg px-3 py-2 text-sm text-white"
+                        />
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDistribute}
+                        disabled={distributing}
+                        className="bg-[#E50914] hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-black uppercase"
+                      >
+                        {distributing ? "Đang gửi..." : "Gửi voucher"}
+                      </button>
+                      <button
+                        onClick={() => setDistribution({ voucherId: null, target: "all", targetTier: "bronze", targetUserId: "" })}
+                        className="bg-[#333] hover:bg-[#444] text-gray-300 px-4 py-2 rounded-lg text-xs font-bold uppercase"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               
-              {/* Actions */}
-              <div className="absolute top-4 right-4 flex gap-1">
-                <button onClick={() => handleEdit(v)} className="p-1.5 rounded-lg hover:bg-[#333] text-gray-400 hover:text-white">
-                  <Edit2 size={15} />
-                </button>
-                <button onClick={() => handleDelete(v.id)} className="p-1.5 rounded-lg hover:bg-red-900/30 text-gray-400 hover:text-red-400">
-                  <Trash2 size={15} />
-                </button>
-              </div>
+
             </div>
           );
         })}

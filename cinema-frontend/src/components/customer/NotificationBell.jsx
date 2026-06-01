@@ -17,7 +17,7 @@ const TYPE_ICONS = {
 };
 
 const timeAgo = (dateStr) => {
-  const d = new Date(String(dateStr).replace("Z", ""));
+  const d = new Date(dateStr);
   const diff = (Date.now() - d.getTime()) / 1000;
   if (diff < 60)    return "Vừa xong";
   if (diff < 3600)  return `${Math.floor(diff / 60)} phút trước`;

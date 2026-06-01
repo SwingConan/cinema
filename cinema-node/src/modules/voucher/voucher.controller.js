@@ -13,6 +13,13 @@ const index = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const publicPromotions = async (req, res, next) => {
+  try {
+    const vouchers = await VoucherService.getPublicPromotions();
+    res.json(vouchers);
+  } catch (err) { next(err); }
+};
+
 const show = async (req, res, next) => {
   try {
     const voucher = await VoucherService.getById(Number(req.params.id));
@@ -43,9 +50,25 @@ const destroy = async (req, res, next) => {
 
 const myVouchers = async (req, res, next) => {
   try {
-    const includeAll = req.query.include_all === '1' || req.query.includeAll === 'true';
+    const includeAll = req.query.include_all === '1' || req.query.include_all === 'true' || req.query.includeAll === 'true';
     const vouchers = await VoucherService.getMyVouchers(req.user.id, { includeAll });
     res.json(vouchers);
+  } catch (err) { next(err); }
+};
+
+const claim = async (req, res, next) => {
+  try {
+    const voucherId = Number(req.body.voucherId || req.body.voucher_id);
+    if (!voucherId) throw Object.assign(new Error('Voucher không hợp lệ.'), { status: 422 });
+    const voucher = await VoucherService.claimVoucher(req.user.id, voucherId);
+    res.status(201).json(voucher);
+  } catch (err) { next(err); }
+};
+
+const distribute = async (req, res, next) => {
+  try {
+    const result = await VoucherService.distributeVoucher(Number(req.params.id), req.body);
+    res.json(result);
   } catch (err) { next(err); }
 };
 
@@ -64,4 +87,7 @@ const validate = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-export const VoucherController = { index, show, store, update, destroy, validate, myVouchers };
+export const VoucherController = {
+  index, publicPromotions, show, store, update, destroy,
+  validate, myVouchers, claim, distribute,
+};

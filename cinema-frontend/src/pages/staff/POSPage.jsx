@@ -17,7 +17,7 @@ import {
 import {
   Monitor, Calendar, ChevronRight, CheckCircle2, ShoppingCart,
   Ticket, Coffee, X, Loader2, Mail, RotateCcw, ArrowLeft, Film, Clock,
-  Printer, CreditCard, Banknote
+  Printer, CreditCard, Banknote, User, Search
 } from "lucide-react";
 
 const formatCurrency = (n) =>
@@ -69,7 +69,10 @@ export default function POSPage() {
   // ── Derived data (useMemo) ────────────────────────────────────────────────
   const uniqueMovies = useMemo(() => {
     const map = new Map();
+    const now = new Date();
     showtimes.forEach(st => {
+      const raw = (st.startTime ?? st.start_time ?? '').toString().replace('Z', '');
+      if (new Date(raw) <= now) return;
       const id = st.movieId ?? st.movie_id;
       if (!map.has(id)) map.set(id, st.movie);
     });
@@ -78,9 +81,14 @@ export default function POSPage() {
 
   const availableDates = useMemo(() => {
     if (!selectedMovieId) return [];
+    const now = new Date();
     const dates = new Set(
       showtimes
-        .filter(st => (st.movieId ?? st.movie_id) === selectedMovieId)
+        .filter(st => {
+          const mid = st.movieId ?? st.movie_id;
+          const raw = (st.startTime ?? st.start_time ?? '').toString().replace('Z', '');
+          return mid === selectedMovieId && new Date(raw) > now;
+        })
         .map(st => {
           const raw = (st.startTime ?? st.start_time ?? '').toString().replace('Z', '');
           return raw.slice(0, 10);
@@ -91,11 +99,12 @@ export default function POSPage() {
 
   const filteredShowtimes = useMemo(() => {
     if (!selectedMovieId) return [];
+    const now = new Date();
     return showtimes.filter(st => {
       const mid = st.movieId ?? st.movie_id;
       const raw = (st.startTime ?? st.start_time ?? '').toString().replace('Z', '');
       const dateStr = raw.slice(0, 10);
-      return mid === selectedMovieId && dateStr === selectedDate;
+      return mid === selectedMovieId && dateStr === selectedDate && new Date(raw) > now;
     });
   }, [showtimes, selectedMovieId, selectedDate]);
 
@@ -116,6 +125,11 @@ export default function POSPage() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [showConcessions, setShowConcessions] = useState(false);
 
+  // ── Customer Lookup (Loyalty & Tier Discount) ───────────────────────────
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [searchingCustomer, setSearchingCustomer] = useState(false);
+
   // ── Trạng thái Checkout ──────────────────────────────────────────────────
   const [posStep, setPosStep] = useState('selecting'); // 'selecting' | 'confirming' | 'paying' | 'receipt'
   const [paymentMethod, setPaymentMethod] = useState(''); // 'cash' | 'card'
@@ -128,6 +142,25 @@ export default function POSPage() {
   const [toast, setToast] = useState(null);
 
   const showToast = (msg, type = "success") => setToast({ msg, type });
+
+  const handleCustomerLookup = async () => {
+    if (!customerSearchQuery.trim()) return;
+    setSearchingCustomer(true);
+    try {
+      const res = await api.get(`/staff/pos/customer-lookup?query=${encodeURIComponent(customerSearchQuery.trim())}`);
+      if (res.data.found) {
+        setSelectedCustomer(res.data.customer);
+        setCustomerEmail(res.data.customer.email || ""); // Tự điền email để nhận vé
+        showToast(`Tìm thấy khách hàng: ${res.data.customer.name}`, "success");
+      } else {
+        showToast("Không tìm thấy khách hàng thành viên.", "error");
+      }
+    } catch (err) {
+      showToast("Lỗi tra cứu khách hàng.", "error");
+    } finally {
+      setSearchingCustomer(false);
+    }
+  };
 
   // ── 1. Load danh sách suất chiếu hôm nay ─────────────────────────────────
   useEffect(() => {
@@ -224,7 +257,11 @@ export default function POSPage() {
   };
   const calcConcessionTotal = () =>
     Array.from(selectedConcessions.values()).reduce((s, { item, quantity }) => s + item.price * quantity, 0);
-  const grandTotal = calcSeatTotal() + calcConcessionTotal();
+  
+  const subtotal = calcSeatTotal() + calcConcessionTotal();
+  const tierDiscountRate = selectedCustomer ? Number(selectedCustomer.discountRate ?? selectedCustomer.discount_rate ?? 0) : 0;
+  const tierDiscountAmount = tierDiscountRate > 0 ? Math.round((subtotal * (tierDiscountRate / 100)) / 1000) * 1000 : 0;
+  const grandTotal = Math.max(0, subtotal - tierDiscountAmount);
 
   // ── 5. Thanh toán (GỌI API) ───────────────────────────────────────────────
   const handlePOSCheckout = async () => {
@@ -242,6 +279,7 @@ export default function POSPage() {
         concessions: concessionsPayload,
         customer_email: customerEmail.trim() || null,
         payment_method: paymentMethod,
+        customer_id: selectedCustomer ? selectedCustomer.id : null,
       });
 
       if (paymentMethod === 'cash') {
@@ -307,6 +345,8 @@ export default function POSPage() {
     setSelectedSeats([]);
     setSelectedConcessions(new Map());
     setCustomerEmail("");
+    setCustomerSearchQuery("");
+    setSelectedCustomer(null);
     setShowConcessions(false);
     setSelectedMovieId(null);
     setSelectedDate(today);
@@ -322,6 +362,8 @@ export default function POSPage() {
     setSelectedSeats([]);
     setSelectedConcessions(new Map());
     setCustomerEmail("");
+    setCustomerSearchQuery("");
+    setSelectedCustomer(null);
     setShowConcessions(false);
     setPosStep('selecting');
     setPaymentMethod('');
@@ -647,10 +689,102 @@ export default function POSPage() {
                 )}
               </div>
 
+              {/* Khách hàng thành viên (tùy chọn) */}
+              <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5" />Khách hàng thành viên (tùy chọn)
+                </p>
+                {!selectedCustomer ? (
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={customerSearchQuery}
+                        onChange={e => setCustomerSearchQuery(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleCustomerLookup();
+                          }
+                        }}
+                        placeholder="Nhập SĐT hoặc Email..."
+                        className="w-full bg-[#111] border border-[#333] rounded-lg pl-3 pr-8 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#E50914]/50 transition-colors"
+                      />
+                      {customerSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setCustomerSearchQuery("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCustomerLookup}
+                      disabled={searchingCustomer || !customerSearchQuery.trim()}
+                      className="bg-[#E50914] hover:bg-[#F40612] disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors flex items-center gap-1"
+                    >
+                      {searchingCustomer ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Search className="w-3.5 h-3.5" />
+                      )}
+                      <span>Tìm</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-[#111] border border-[#333] rounded-lg p-3 relative flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCustomer(null);
+                        setCustomerSearchQuery("");
+                        setCustomerEmail("");
+                      }}
+                      className="absolute top-2 right-2 text-gray-500 hover:text-red-400 transition-colors"
+                      title="Hủy chọn khách hàng"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-white block max-w-[80%] truncate">
+                        {selectedCustomer.name}
+                      </span>
+                      {(() => {
+                        const tier = (selectedCustomer.member_tier ?? selectedCustomer.memberTier ?? 'bronze').toLowerCase();
+                        let badgeClass = "bg-amber-900/30 text-amber-400 border border-amber-900/50";
+                        let label = "Đồng";
+                        if (tier === 'platinum') {
+                          badgeClass = "bg-indigo-950/40 text-indigo-300 border border-indigo-900/50";
+                          label = "Bạch Kim (8%)";
+                        } else if (tier === 'gold') {
+                          badgeClass = "bg-yellow-950/40 text-yellow-400 border border-yellow-800/50";
+                          label = "Vàng (5%)";
+                        } else if (tier === 'silver') {
+                          badgeClass = "bg-slate-900 text-slate-300 border border-slate-700";
+                          label = "Bạc (3%)";
+                        }
+                        return (
+                          <span className={`text-[10px] font-black px-1.5 py-0.5 rounded uppercase ${badgeClass}`}>
+                            {label}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <div className="text-xs text-gray-400 space-y-0.5">
+                      <p>SĐT: {selectedCustomer.phone || "Chưa cập nhật"}</p>
+                      <p>Email: {selectedCustomer.email || "Chưa cập nhật"}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Email khách (tùy chọn) */}
               <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4">
                 <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5" />Email khách hàng (tùy chọn)
+                  <Mail className="w-3.5 h-3.5" />Email nhận vé (tùy chọn)
                 </p>
                 <input
                   type="email"
@@ -666,8 +800,20 @@ export default function POSPage() {
             </div>
 
             {/* Grand Total + CTA */}
-            <div className="p-4 border-t border-[#222] bg-[#0d0d0d]">
-              <div className="flex justify-between items-center mb-4">
+            <div className="p-4 border-t border-[#222] bg-[#0d0d0d] space-y-3">
+              {tierDiscountAmount > 0 && (
+                <div className="space-y-1.5 border-b border-[#222] pb-3 text-sm">
+                  <div className="flex justify-between text-gray-400">
+                    <span>Tạm tính</span>
+                    <span>{formatCurrency(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-green-400">
+                    <span>Giảm giá ({selectedCustomer ? (selectedCustomer.member_tier ?? selectedCustomer.memberTier ?? 'bronze').toUpperCase() : ''})</span>
+                    <span>-{formatCurrency(tierDiscountAmount)}</span>
+                  </div>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
                 <span className="text-gray-400 font-bold uppercase text-sm">Tổng cộng</span>
                 <span className="text-2xl font-black text-[#E50914]">{formatCurrency(grandTotal)}</span>
               </div>
@@ -725,6 +871,24 @@ export default function POSPage() {
                     ) : (
                       <p className="font-bold text-gray-600">Không có</p>
                     )}
+                  </div>
+                </div>
+
+                {/* Chi tiết thanh toán */}
+                <div className="mt-4 pt-4 border-t border-[#2a2a2a] text-sm space-y-1.5">
+                  <div className="flex justify-between text-gray-400">
+                    <span>Tạm tính</span>
+                    <span className="font-bold text-white">{formatCurrency(subtotal)}</span>
+                  </div>
+                  {tierDiscountAmount > 0 && (
+                    <div className="flex justify-between text-green-400">
+                      <span>Giảm giá hạng ({selectedCustomer ? (selectedCustomer.member_tier ?? selectedCustomer.memberTier ?? 'bronze').toUpperCase() : ''})</span>
+                      <span className="font-bold">-{formatCurrency(tierDiscountAmount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-white font-black text-base pt-1.5 border-t border-[#222]">
+                    <span>Tổng cộng</span>
+                    <span className="text-[#E50914]">{formatCurrency(grandTotal)}</span>
                   </div>
                 </div>
               </div>

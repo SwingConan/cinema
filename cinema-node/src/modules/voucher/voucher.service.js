@@ -5,10 +5,21 @@
 // điều kiện áp dụng (ngày, giới hạn, min order)
 // =============================================
 import { VoucherRepository } from './voucher.repository.js';
+import pool from '../../config/database.js';
 
 // ── ADMIN CRUD ──────────────────────────────────────────────────────────
 
 const getAll = async () => VoucherRepository.findAll();
+
+const buildPersonalVoucherCode = (code, userId) => {
+  const suffix = `-U${userId}`;
+  if (suffix.length >= 20) return `U${String(userId).slice(-19)}`.toUpperCase();
+  const prefixLength = 20 - suffix.length;
+  const prefix = String(code || 'VC').toUpperCase().replace(/\s+/g, '').substring(0, prefixLength);
+  return `${prefix || 'VC'}${suffix}`.substring(0, 20).toUpperCase();
+};
+
+const getPublicPromotions = async () => VoucherRepository.findPublicPromotions();
 
 const getMyVouchers = async (userId, { includeAll = false } = {}) => {
   return includeAll
@@ -27,6 +38,105 @@ const create = async (data) => {
   const existing = await VoucherRepository.findByCode(data.code);
   if (existing) throw Object.assign(new Error('Mã voucher đã tồn tại.'), { status: 422 });
   return VoucherRepository.create(data);
+};
+
+const claimVoucher = async (userId, voucherId) => {
+  const voucher = await VoucherRepository.findById(voucherId);
+  if (!voucher || !voucher.isActive || voucher.userId) {
+    throw Object.assign(new Error('Voucher không tồn tại hoặc không thể thu thập.'), { status: 404 });
+  }
+
+  const targetCode = buildPersonalVoucherCode(voucher.code, userId);
+  const isClaimed = await VoucherRepository.findByCode(targetCode);
+  if (isClaimed) {
+    throw Object.assign(new Error('Bạn đã thu thập voucher này rồi.'), { status: 422 });
+  }
+
+  return VoucherRepository.create({
+    code: targetCode,
+    name: voucher.name,
+    description: voucher.description,
+    discountType: voucher.discountType,
+    discountValue: voucher.discountValue,
+    maxDiscount: voucher.maxDiscount,
+    minOrder: voucher.minOrder,
+    usageLimit: 1,
+    perUserLimit: 1,
+    validFrom: voucher.validFrom,
+    validTo: voucher.validTo,
+    applicableDays: voucher.applicableDays,
+    isActive: true,
+    userId,
+    branchId: voucher.branchId,
+  });
+};
+
+const distributeVoucher = async (voucherId, { target, targetTier = null, targetUserId = null }) => {
+  const voucher = await VoucherRepository.findById(voucherId);
+  if (!voucher) throw Object.assign(new Error('Voucher không tồn tại.'), { status: 404 });
+
+  let users = [];
+  if (target === 'all') {
+    [users] = await pool.query("SELECT id FROM users WHERE role = 'customer'");
+  } else if (target === 'tier') {
+    if (!targetTier) throw Object.assign(new Error('Vui lòng chọn hạng thành viên.'), { status: 422 });
+    [users] = await pool.query("SELECT id FROM users WHERE role = 'customer' AND member_tier = ?", [targetTier]);
+  } else if (target === 'specific') {
+    if (!targetUserId) throw Object.assign(new Error('Vui lòng nhập user cần phân phối.'), { status: 422 });
+    users = [{ id: targetUserId }];
+  } else {
+    throw Object.assign(new Error('Kiểu phân phối không hợp lệ.'), { status: 422 });
+  }
+
+  const rows = users.map((u) => {
+    const uid = Number(u.id);
+    return [
+      buildPersonalVoucherCode(voucher.code, uid),
+      voucher.name,
+      voucher.description,
+      voucher.discountType,
+      voucher.discountValue,
+      voucher.maxDiscount,
+      voucher.minOrder,
+      1,
+      1,
+      voucher.validFrom,
+      voucher.validTo,
+      voucher.applicableDays,
+      1,
+      uid,
+      voucher.branchId,
+    ];
+  });
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    let inserted = 0;
+    const batchSize = 500;
+
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const batch = rows.slice(i, i + batchSize);
+      if (batch.length === 0) continue;
+      const [result] = await conn.query(
+        `INSERT IGNORE INTO vouchers (
+           code, name, description, discount_type, discount_value, max_discount, min_order,
+           usage_limit, per_user_limit, valid_from, valid_to, applicable_days, is_active, user_id, branch_id
+         )
+         VALUES ?`,
+        [batch]
+      );
+      inserted += result.affectedRows;
+    }
+
+    await conn.commit();
+    return { success: true, count: inserted, skipped: rows.length - inserted };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 };
 
 const update = async (id, data) => {
@@ -61,6 +171,35 @@ const validateVoucher = async (code, { userId, orderAmount, branchId = null }) =
   // 2.1. Voucher ca nhan chi duoc dung boi chu so huu
   if (voucher.userId && Number(voucher.userId) !== Number(userId)) {
     throw Object.assign(new Error('Mã giảm giá này không thuộc sở hữu của bạn.'), { status: 403 });
+  }
+
+  if (!voucher.userId) {
+    const claimedCode = buildPersonalVoucherCode(voucher.code, userId);
+    const userClaimedVoucher = await VoucherRepository.findByCode(claimedCode);
+    if (userClaimedVoucher) {
+      const usedCount = await VoucherRepository.getUserUsageCount(userClaimedVoucher.id, userId);
+      if (usedCount > 0) {
+        throw Object.assign(new Error('Bạn đã sử dụng mã giảm giá này cho đơn hàng khác.'), { status: 422 });
+      }
+    }
+  } else {
+    const suffix = `-U${userId}`;
+    if (voucher.code.endsWith(suffix)) {
+      const [rootRows] = await pool.query(
+        `SELECT id
+         FROM vouchers
+         WHERE user_id IS NULL
+           AND UPPER(CONCAT(SUBSTRING(code, 1, GREATEST(1, 20 - CHAR_LENGTH(?))), ?)) = ?
+         LIMIT 1`,
+        [suffix, suffix, voucher.code]
+      );
+      if (rootRows.length > 0) {
+        const usedRootCount = await VoucherRepository.getUserUsageCount(rootRows[0].id, userId);
+        if (usedRootCount > 0) {
+          throw Object.assign(new Error('Bạn đã sử dụng mã giảm giá này cho đơn hàng khác.'), { status: 422 });
+        }
+      }
+    }
   }
 
   // 3. Trong thời hạn?
@@ -136,6 +275,6 @@ const validateVoucher = async (code, { userId, orderAmount, branchId = null }) =
 
 export const VoucherService = {
   getAll, getById, create, update, remove,
-  getMyVouchers,
-  validateVoucher,
+  getPublicPromotions, getMyVouchers,
+  claimVoucher, distributeVoucher, validateVoucher,
 };

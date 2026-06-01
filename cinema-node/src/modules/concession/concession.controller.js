@@ -36,14 +36,18 @@ const show = async (req, res, next) => {
 
 const store = async (req, res, next) => {
   try {
-    const item = await ConcessionService.create(req.body);
+    const item = await ConcessionService.create(req.body, req.file);
     res.status(201).json(item);
   } catch (err) { next(err); }
 };
 
 const update = async (req, res, next) => {
   try {
-    const item = await ConcessionService.update(Number(req.params.id), req.body);
+    console.log('[DEBUG] Concession update request:', {
+      body: req.body,
+      file: req.file
+    });
+    const item = await ConcessionService.update(Number(req.params.id), req.body, req.file);
     res.json(item);
   } catch (err) { next(err); }
 };

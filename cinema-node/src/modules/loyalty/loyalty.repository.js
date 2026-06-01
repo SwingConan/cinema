@@ -91,7 +91,9 @@ const earnPoints = async (conn, userId, bookingId, totalAmount) => {
   const earnRate = tierConfig ? Number(tierConfig.earn_rate) : 3;
 
   // 2. Tính điểm thực tế (3% - 10% hoàn tiền tùy hạng thẻ)
-  const pointsEarned = Math.floor(Number(totalAmount) * earnRate / 1000);
+  // Quy đổi: 1 điểm = 100đ chiết khấu (VND). Ví dụ chi tiêu 1M với 3% -> hoàn 30k = 300 điểm.
+  // Công thức: points = amount * (earnRate / 100) / 100 = amount * earnRate / 10000
+  const pointsEarned = Math.floor(Number(totalAmount) * earnRate / 10000);
   const newPoints = user.loyalty_points + pointsEarned;
   const newTotalSpent = Number(user.total_spent) + Number(totalAmount);
 
@@ -128,7 +130,7 @@ const earnPoints = async (conn, userId, bookingId, totalAmount) => {
 };
 
 // ── Redeem Points ────────────────────────────────────────────────────
-const redeemPoints = async (userId, pointsToRedeem) => {
+const redeemPointsLegacy = async (userId, pointsToRedeem) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -144,8 +146,8 @@ const redeemPoints = async (userId, pointsToRedeem) => {
     const newBalance = user.loyalty_points - pointsToRedeem;
     await conn.query('UPDATE users SET loyalty_points = ? WHERE id = ?', [newBalance, userId]);
 
-    // 1000 điểm = 10.000 VND
-    const discountAmount = Math.floor(pointsToRedeem / 100) * 1000;
+    // 1 điểm = 100 VND chiết khấu
+    const discountAmount = pointsToRedeem * 100;
     const generatedCode = `LY-${randomBytes(3).toString('hex').toUpperCase()}-${Math.floor(Date.now() / 1000).toString().slice(-4)}`;
 
     await conn.query(
@@ -179,6 +181,57 @@ const redeemPoints = async (userId, pointsToRedeem) => {
   }
 };
 
+const redeemPoints = async (userId, config) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[user]] = await conn.query(
+      'SELECT loyalty_points FROM users WHERE id = ? FOR UPDATE',
+      [userId]
+    );
+    if (!user || user.loyalty_points < config.points) {
+      throw Object.assign(new Error('Số dư điểm tích luỹ không đủ.'), { status: 400 });
+    }
+
+    const newBalance = user.loyalty_points - config.points;
+    await conn.query('UPDATE users SET loyalty_points = ? WHERE id = ?', [newBalance, userId]);
+
+    await conn.query(
+      `INSERT INTO point_transactions (user_id, type, points, balance_after, description)
+       VALUES (?, 'redeem', ?, ?, ?)`,
+      [userId, -config.points, newBalance, `Đổi gói quà ${config.label}`]
+    );
+
+    const voucherCode = `LY-${randomBytes(2).toString('hex').toUpperCase()}-U${userId}-${Math.floor(Date.now() / 1000).toString().slice(-3)}`.substring(0, 20);
+    await conn.query(
+      `INSERT INTO vouchers (
+         code, name, description, discount_type, discount_value, max_discount, min_order,
+         usage_limit, per_user_limit, valid_from, valid_to, is_active, user_id
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY), 1, ?)`,
+      [
+        voucherCode,
+        config.label,
+        config.desc,
+        config.type,
+        config.value,
+        config.max,
+        config.minOrder,
+        userId,
+      ]
+    );
+
+    await conn.commit();
+    return { success: true, newBalance, voucherCode };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+};
+
 // ── Next Tier Info ───────────────────────────────────────────────────
 const getNextTier = async (currentTier, totalSpent) => {
   const [rows] = await pool.query(
@@ -197,5 +250,5 @@ const getNextTier = async (currentTier, totalSpent) => {
 export const LoyaltyRepository = {
   getAllTierConfigs, updateTierConfig,
   getUserLoyalty, getPointHistory,
-  earnPoints, redeemPoints, getNextTier,
+  earnPoints, redeemPoints, redeemPointsLegacy, getNextTier,
 };
