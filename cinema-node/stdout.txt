@@ -1,1 +1,0 @@
-[DB] ✅ MySQL Pool kết nối thành công!
