@@ -230,7 +230,7 @@ export default function MoviesPage() {
                           {movie.poster ? (
                             <img
                               className="h-14 w-10 rounded object-cover mr-4 bg-black border border-[#333]"
-                              src={`/uploads/${movie.poster}`}
+                              src={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${movie.poster}`}
                               alt=""
                             />
                           ) : (
@@ -325,7 +325,7 @@ export default function MoviesPage() {
               <div className="md:w-1/3 flex-shrink-0">
                 {viewingMovie.poster ? (
                   <img
-                    src={`/uploads/${viewingMovie.poster}`}
+                    src={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${viewingMovie.poster}`}
                     alt={viewingMovie.title}
                     className="w-full rounded-lg shadow-xl border border-[#333]"
                   />

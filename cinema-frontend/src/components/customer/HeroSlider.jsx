@@ -76,7 +76,7 @@ export default function HeroSlider({ movies }) {
               <div
                 className="absolute inset-0 scale-110 blur-2xl opacity-40 transform"
                 style={{
-                  backgroundImage: `url(/uploads/${movie.poster})`,
+                  backgroundImage: `url(${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${movie.poster})`,
                   backgroundPosition: "center",
                   backgroundSize: "cover",
                 }}
@@ -111,7 +111,7 @@ export default function HeroSlider({ movies }) {
                   {/* Poster Phim */}
                   <div className="w-28 sm:w-36 md:w-64 flex-shrink-0 shadow-2xl border-2 md:border-4 border-[#333] rounded-xl overflow-hidden block mx-auto md:mx-0">
                     <img
-                      src={`/uploads/${movie.poster}`}
+                      src={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${movie.poster}`}
                       alt={movie.title}
                       className="w-full h-auto object-cover"
                     />

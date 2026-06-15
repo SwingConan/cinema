@@ -121,7 +121,7 @@ function TicketCard({ booking, onResumePayment, onCancelBooking, loadingQR, onZo
         <div className="w-24 flex-shrink-0 relative overflow-hidden bg-black">
           {booking.showtime?.movie?.poster ? (
             <img
-              src={`/uploads/${booking.showtime.movie.poster}`}
+              src={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${booking.showtime.movie.poster}`}
               alt="poster"
               className="absolute inset-0 w-full h-full object-cover opacity-90"
             />

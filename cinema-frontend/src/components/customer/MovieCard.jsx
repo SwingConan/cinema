@@ -12,7 +12,7 @@ export default function MovieCard({ movie }) {
       {/* Poster Image */}
       {movie.poster ? (
         <img
-          src={`/uploads/${movie.poster}`}
+          src={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${movie.poster}`}
           alt={movie.title}
           className="absolute inset-0 w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:blur-[2px] opacity-100 group-hover:opacity-45"
         />

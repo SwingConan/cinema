@@ -302,7 +302,7 @@ export default function MovieDetailPage() {
         <div
           className="absolute inset-0 opacity-20 transform scale-105"
           style={{
-            backgroundImage: `url(/uploads/${movie.poster})`,
+            backgroundImage: `url(${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${movie.poster})`,
             backgroundPosition: "center",
             backgroundSize: "cover",
             filter: "blur(8px)",
@@ -315,7 +315,7 @@ export default function MovieDetailPage() {
           <div className="flex flex-col md:flex-row gap-8 items-end w-full">
             {movie.poster && (
               <img
-                src={`/uploads/${movie.poster}`}
+                src={`${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${movie.poster}`}
                 alt={movie.title}
                 className="w-48 md:w-64 rounded-xl shadow-2xl border border-[#333] hidden sm:block"
               />

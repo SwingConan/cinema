@@ -74,7 +74,7 @@ function ConcessionModal({ item, onClose, onSaved }) {
     isActive:    item.isActive    ?? true,
   } : { ...EMPTY_FORM });
   const [imageFile, setImageFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(form.image ? (form.image.startsWith('http') ? form.image : `/uploads/${form.image}`) : "");
+  const [previewUrl, setPreviewUrl] = useState(form.image ? (form.image.startsWith('http') ? form.image : `${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${form.image}`) : "");
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState("");
 
@@ -450,7 +450,7 @@ export default function ManageConcessions() {
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-xl overflow-hidden bg-[#222] border border-[#2a2a2a] shrink-0 flex items-center justify-center">
                           {item.image ? (
-                            <img src={item.image.startsWith('http') ? item.image : `/uploads/${item.image}`} alt={item.name}
+                            <img src={item.image.startsWith('http') ? item.image : `${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${item.image}`} alt={item.name}
                               onError={e => { e.target.style.display = "none"; e.target.nextSibling.style.display = "flex"; }}
                               className="w-full h-full object-cover" />
                           ) : null}

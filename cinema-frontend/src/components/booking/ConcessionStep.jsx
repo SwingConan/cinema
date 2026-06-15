@@ -109,7 +109,7 @@ export default function ConcessionStep({ selectedConcessions, onUpdateConcession
                 <div className="w-full h-28 rounded-lg mb-3 overflow-hidden bg-[#1a1a1a] flex items-center justify-center">
                   {item.image ? (
                     <img
-                      src={item.image.startsWith('http') ? item.image : `/uploads/${item.image}`}
+                      src={item.image.startsWith('http') ? item.image : `${import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000'}/uploads/${item.image}`}
                       alt={item.name}
                       className="w-full h-full object-cover"
                       onError={(e) => {
