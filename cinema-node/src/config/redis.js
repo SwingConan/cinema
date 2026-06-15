@@ -6,11 +6,14 @@
 // =============================================
 import Redis from 'ioredis';
 
+const isUpstash = (process.env.REDIS_HOST && process.env.REDIS_HOST.includes('upstash.io')) || process.env.REDIS_TLS === 'true';
+
 const redisClient = new Redis({
   host:     process.env.REDIS_HOST     || '127.0.0.1',
   port:     Number(process.env.REDIS_PORT) || 6379,
   password: process.env.REDIS_PASSWORD || undefined,
   lazyConnect: true,  // Không connect ngay, connect khi dùng lần đầu
+  tls: isUpstash ? {} : undefined
 });
 
 redisClient.on('connect', () => {

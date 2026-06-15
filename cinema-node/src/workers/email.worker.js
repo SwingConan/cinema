@@ -15,10 +15,13 @@ import { Queue, Worker } from 'bullmq';
 import { sendTicketEmail, sendOTPEmail } from '../services/email.service.js';
 
 // ── Cấu hình Redis connection ────────────────────────────────────────────
+const isUpstash = (process.env.REDIS_HOST && process.env.REDIS_HOST.includes('upstash.io')) || process.env.REDIS_TLS === 'true';
+
 const redisConnection = {
   host: process.env.REDIS_HOST || '127.0.0.1',
   port: Number(process.env.REDIS_PORT) || 6379,
   password: process.env.REDIS_PASSWORD || undefined,
+  ...(isUpstash ? { tls: {} } : {})
 };
 
 // ── Khởi tạo Queue ───────────────────────────────────────────────────────
