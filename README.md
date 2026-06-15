@@ -34,6 +34,7 @@
 - [API Endpoints](#-api-endpoints)
 - [Luồng nghiệp vụ cốt lõi](#-luồng-nghiệp-vụ-cốt-lõi)
 - [Tài khoản Demo](#-tài-khoản-demo)
+- [Triển khai Production (Cloud Deployment)](#-triển-khai-production-cloud-deployment)
 
 ---
 
@@ -983,6 +984,51 @@ flowchart LR
     style H fill:#1a1a2e,stroke:#F0DB4F,color:#fff
     style J fill:#0d7c3d,stroke:#0d7c3d,color:#fff
 ```
+
+---
+
+## 🚀 Triển khai Production (Cloud Deployment)
+
+Hệ thống đã được thiết kế tối ưu hóa để triển khai trên các dịch vụ đám mây (Cloud Providers) miễn phí và ổn định 24/7 dưới dạng kiến trúc microservices/distributed:
+
+```mermaid
+graph TD
+    User([Người dùng]) -->|HTTPS| Frontend[Vercel: Frontend React]
+    Frontend -->|API Requests| Backend[Render: Backend Node.js]
+    Backend -->|Queries SQL| Database[(Aiven: MySQL Database)]
+    Backend -->|Message Queue / OTP| Cache[(Upstash: Serverless Redis)]
+```
+
+### 📦 Các dịch vụ đám mây sử dụng
+1.  **Frontend (React/Vite)**: Triển khai trên **Vercel**
+    *   *Địa chỉ*: [https://cinema-sepia-two.vercel.app/](https://cinema-sepia-two.vercel.app/)
+    *   *Tính năng*: Tự động build, tối ưu hóa CDN toàn cầu, thời gian tải trang < 1 giây, hỗ trợ HTTPS mặc định.
+2.  **Backend (Node.js/Express)**: Triển khai trên **Render**
+    *   *Địa chỉ*: [https://cinema-backend-xhbo.onrender.com/](https://cinema-backend-xhbo.onrender.com/)
+    *   *Tính năng*: Chạy container Node.js tự động, tự động deploy khi push code lên Git.
+3.  **Cơ sở dữ liệu (MySQL)**: Triển khai trên **Aiven**
+    *   *Địa chỉ host*: `mysql-10e84bb3-loivale-d731.e.aivencloud.com`
+    *   *Tính năng*: Quản lý MySQL 8.4 bản Free lâu dài không hết hạn, lưu trữ dữ liệu vĩnh viễn, kết nối bảo mật qua SSL/TLS.
+4.  **Hàng đợi & Cache (Redis)**: Triển khai trên **Upstash**
+    *   *Địa chỉ host*: `current-pug-83830.upstash.io`
+    *   *Tính năng*: Serverless Redis miễn phí dài hạn, quản lý các tác vụ ngầm thông qua hàng đợi BullMQ (gửi E-Ticket, OTP) và lưu trữ trạng thái khóa ghế.
+
+### ⚙️ Cấu hình môi trường Production
+Khi deploy lên các nền tảng trên, cấu hình môi trường được thiết lập thông qua các biến cấu hình (Environment Variables):
+*   **Vercel (Frontend)**:
+    *   `VITE_API_URL=https://cinema-backend-xhbo.onrender.com/api` (Đường dẫn kết nối API)
+    *   `VITE_SOCKET_URL=https://cinema-backend-xhbo.onrender.com` (Đường dẫn kết nối Socket.io)
+*   **Render (Backend)**:
+    *   `NODE_ENV=production`
+    *   `DB_HOST=mysql-10e84bb3-loivale-d731.e.aivencloud.com`
+    *   `DB_PORT=20269`
+    *   `DB_NAME=defaultdb`
+    *   `DB_USER=avnadmin`
+    *   `DB_PASS=<MAT_KHAU_AIVEN_CUA_BAN>`
+    *   `REDIS_HOST=current-pug-83830.upstash.io`
+    *   `REDIS_PORT=6379`
+    *   `REDIS_PASSWORD=<MAT_KHAU_REDIS_UPSTASH_CỦA_BẠN>`
+    *   `JWT_SECRET=cinema_jwt_key_secure_production_2026`
 
 ---
 
