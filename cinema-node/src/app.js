@@ -93,6 +93,8 @@ function isAllowedOrigin(origin) {
     if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
     // Ngrok tunnel domains
     if (url.hostname.endsWith('.ngrok-free.dev') || url.hostname.endsWith('.ngrok.io')) return true;
+    // Vercel domains
+    if (url.hostname.endsWith('.vercel.app')) return true;
     // FRONTEND_URL trong .env
     if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) return true;
   } catch { /* invalid URL → reject */ }
