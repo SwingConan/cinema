@@ -65,14 +65,15 @@ export const AuthProvider = ({ children }) => {
 
 
     const logout = async () => {
+        // Cập nhật UI ngay lập tức để tránh block hiển thị (Fix INP Issue)
+        localStorage.removeItem('token');
+        setUser(null);
+        toast.success("Đăng xuất thành công!");
+
         try {
             await api.post('/auth/logout');
         } catch (error) {
-            console.error('Lỗi đăng xuất', error);
-        } finally {
-            localStorage.removeItem('token');
-            setUser(null);
-            toast.success("Đăng xuất thành công!");
+            console.error('Lỗi đăng xuất phía server', error);
         }
     };
 
