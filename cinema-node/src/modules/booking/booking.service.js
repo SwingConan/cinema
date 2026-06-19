@@ -575,6 +575,7 @@ const cancelPOSBooking = async ({ bookingId, staffId }) => {
     // Cancel
     await conn.query("UPDATE bookings SET status = 'cancelled', updated_at = NOW() WHERE id = ?", [bookingId]);
     await conn.query('DELETE FROM booking_seats WHERE booking_id = ?', [bookingId]);
+    await conn.query('DELETE FROM voucher_usages WHERE booking_id = ?', [bookingId]);
 
     await conn.commit();
     console.log(`[POS] 🚫 Staff #${staffId} hủy đơn POS Booking #${bookingId}`);
@@ -629,6 +630,9 @@ const cancelBooking = async ({ bookingId, userId }) => {
 
     // 4. Xóa booking_seats để giải phóng ghế
     await conn.query('DELETE FROM booking_seats WHERE booking_id = ?', [bookingId]);
+
+    // Giải phóng voucher_usages liên kết với booking này (trả lại voucher)
+    await conn.query('DELETE FROM voucher_usages WHERE booking_id = ?', [bookingId]);
 
     // 5. Xóa seat_locks của user cho showtime này
     await conn.query(

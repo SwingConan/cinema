@@ -68,6 +68,12 @@ const cancelExpiredBookings = async () => {
       [bookingIds]
     );
 
+    // Giải phóng voucher_usages liên kết với các booking hết hạn
+    await conn.query(
+      `DELETE FROM voucher_usages WHERE booking_id IN (?)`,
+      [bookingIds]
+    );
+
     // 5. Xóa seat_locks bị kẹt của các user này
     for (const booking of expiredBookings) {
       await conn.query(
