@@ -9,11 +9,14 @@ import nodemailer from 'nodemailer';
 import QRCode     from 'qrcode';
 import dns        from 'dns';
 
+const smtpPort = Number(process.env.SMTP_PORT) || 587;
+const isSecure = smtpPort === 465;
+
 // ── Tạo transporter (tái sử dụng, không tạo lại mỗi lần gửi) ───────────
 const transporter = nodemailer.createTransport({
   host:   process.env.SMTP_HOST || 'smtp.gmail.com',
-  port:   Number(process.env.SMTP_PORT) || 465,
-  secure: true,           // true cho port 465, false cho 587 (TLS)
+  port:   smtpPort,
+  secure: isSecure,           // true cho port 465, false cho 587 (TLS)
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
