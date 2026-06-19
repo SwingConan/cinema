@@ -49,8 +49,32 @@ const fmtAbsoluteDatetime = (val) => {
   return isNaN(d) ? String(val) : d.toLocaleString("vi-VN");
 };
 
+const isBookingShowtimePassed = (booking) => {
+  const timeStr = booking.showtime?.endTime ?? booking.showtime?.end_time ?? booking.showtime?.startTime ?? booking.showtime?.start_time;
+  if (!timeStr) return false;
+
+  const formattedStr = String(timeStr).replace(" ", "T").replace("Z", "");
+  const showtimeTime = new Date(formattedStr);
+  if (isNaN(showtimeTime.getTime())) return false;
+
+  const hasEndTime = booking.showtime?.endTime || booking.showtime?.end_time;
+  const finalEndTime = hasEndTime
+    ? showtimeTime
+    : new Date(showtimeTime.getTime() + 120 * 60 * 1000);
+
+  return finalEndTime < new Date();
+};
+
 // ── StatusBadge ───────────────────────────────────────────────────────────────
-function StatusBadge({ status }) {
+function StatusBadge({ status, isExpiredPaid }) {
+  if (isExpiredPaid) {
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-black border uppercase tracking-wider bg-gray-900/40 text-gray-400 border-gray-800/60">
+        <XCircle className="w-3 h-3 mr-1 text-gray-500" />
+        Hết hạn / Không đi
+      </span>
+    );
+  }
   const map = {
     paid:      { cls: "bg-emerald-900/40 text-emerald-400 border-emerald-800/60", icon: <CheckCircle2 className="w-3 h-3 mr-1" />, label: "Đã thanh toán" },
     used:      { cls: "bg-blue-900/40 text-blue-400 border-blue-800/60",          icon: <CheckCircle2 className="w-3 h-3 mr-1" />, label: "Đã xem phim" },
@@ -72,6 +96,7 @@ function TicketCard({ booking, onResumePayment, onCancelBooking, loadingQR, onZo
   const seatNames = booking.seatNames;
   const isPaid    = booking.status === "paid";
   const isPending = booking.status === "pending";
+  const isExpiredPaid = isPaid && isBookingShowtimePassed(booking);
 
   const [timeLeft, setTimeLeft] = useState(10);
 
@@ -110,7 +135,7 @@ function TicketCard({ booking, onResumePayment, onCancelBooking, loadingQR, onZo
           <span className="text-gray-500 text-xs">
             {fmtAbsoluteDatetime(booking.createdAt ?? booking.created_at)}
           </span>
-          <StatusBadge status={booking.status} />
+          <StatusBadge status={booking.status} isExpiredPaid={isExpiredPaid} />
         </div>
       </div>
 
@@ -175,8 +200,8 @@ function TicketCard({ booking, onResumePayment, onCancelBooking, loadingQR, onZo
         {/* RIGHT — QR / Action panel */}
         <div className="flex-shrink-0 w-32 flex flex-col items-center justify-center p-3 gap-2">
 
-          {/* PAID → show QR stub */}
-          {isPaid && qrCode && (
+          {/* PAID & NOT EXPIRED → show QR stub */}
+          {isPaid && !isExpiredPaid && qrCode && (
             <>
               <div 
                 className="bg-white p-1.5 rounded-lg flex flex-col items-center gap-1 w-full max-w-[80px] cursor-pointer hover:scale-105 transition-transform"
@@ -196,6 +221,14 @@ function TicketCard({ booking, onResumePayment, onCancelBooking, loadingQR, onZo
                 Đưa mã này<br/>để nhận vé
               </p>
             </>
+          )}
+
+          {/* PAID & EXPIRED → show expired stub */}
+          {isPaid && isExpiredPaid && (
+            <div className="text-gray-500 text-[10px] text-center font-bold uppercase leading-tight">
+              <XCircle className="w-6 h-6 mx-auto mb-1 text-gray-500" />
+              Hết hạn
+            </div>
           )}
 
           {/* PENDING → countdown + pay/cancel buttons */}
@@ -573,9 +606,9 @@ function ProfilePageContent() {
   };
 
   // ── Booking buckets ────────────────────────────────────────────────────────
-  const upcomingBookings = bookings.filter((b) => b.status === "paid");
+  const upcomingBookings = bookings.filter((b) => b.status === "paid" && !isBookingShowtimePassed(b));
   const pendingBookings  = bookings.filter((b) => b.status === "pending");
-  const pastBookings     = bookings.filter((b) => b.status === "used" || b.status === "cancelled");
+  const pastBookings     = bookings.filter((b) => b.status === "used" || b.status === "cancelled" || (b.status === "paid" && isBookingShowtimePassed(b)));
 
   const historySubTabs = [
     { key: "upcoming", label: "🎟️ Vé Sắp Xem",       count: upcomingBookings.length },
