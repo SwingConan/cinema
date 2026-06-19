@@ -12,30 +12,98 @@ import dns        from 'dns';
 const smtpPort = Number(process.env.SMTP_PORT) || 587;
 const isSecure = smtpPort === 465;
 
-// ── Tạo transporter (tái sử dụng, không tạo lại mỗi lần gửi) ───────────
-const transporter = nodemailer.createTransport({
-  host:   process.env.SMTP_HOST || 'smtp.gmail.com',
-  port:   smtpPort,
-  secure: isSecure,           // true cho port 465, false cho 587 (TLS)
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  connectionTimeout: 10000, // 10s
-  greetingTimeout:   10000, // 10s
-  socketTimeout:     15000, // 15s
-  // Bắt buộc dùng IPv4 vì Render không hỗ trợ định tuyến IPv6 (gây lỗi ENETUNREACH)
-  lookup: (hostname, options, callback) => {
-    dns.lookup(hostname, { family: 4 }, callback);
-  },
-});
+// ── Tạo transporter (tái sử dụng, chỉ tạo nếu không dùng API bên thứ ba) ───────────
+let transporter = null;
+if (!process.env.BREVO_API_KEY) {
+  transporter = nodemailer.createTransport({
+    host:   process.env.SMTP_HOST || 'smtp.gmail.com',
+    port:   smtpPort,
+    secure: isSecure,           // true cho port 465, false cho 587 (TLS)
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    connectionTimeout: 10000, // 10s
+    greetingTimeout:   10000, // 10s
+    socketTimeout:     15000, // 15s
+    // Bắt buộc dùng IPv4 vì Render không hỗ trợ định tuyến IPv6 (gây lỗi ENETUNREACH)
+    lookup: (hostname, options, callback) => {
+      dns.lookup(hostname, { family: 4 }, callback);
+    },
+  });
 
-// ── Kiểm tra kết nối SMTP khi module load ───────────────────────────────
-transporter.verify().then(() => {
-  console.log('[Email] ✅ SMTP kết nối thành công. Sẵn sàng gửi mail.');
-}).catch((err) => {
-  console.warn('[Email] ⚠️ SMTP chưa kết nối được (kiểm tra .env):', err.message);
-});
+  transporter.verify().then(() => {
+    console.log('[Email] ✅ SMTP kết nối thành công. Sẵn sàng gửi mail.');
+  }).catch((err) => {
+    console.warn('[Email] ⚠️ SMTP chưa kết nối được (kiểm tra .env hoặc dùng Brevo API):', err.message);
+  });
+} else {
+  console.log('[Email] 🚀 Đang sử dụng Brevo HTTP API để gửi email (bypass chặn cổng của Render Free).');
+}
+
+/**
+ * Hàm gửi mail chung (Tự động chọn Brevo API qua HTTPS hoặc Nodemailer SMTP)
+ */
+const sendMailHelper = async ({ toEmail, subject, htmlBody, attachments = [] }) => {
+  if (process.env.BREVO_API_KEY) {
+    const payload = {
+      sender: {
+        name: process.env.SMTP_FROM_NAME || 'Cinema Ticket',
+        email: process.env.SMTP_USER || 'congvieccv567@gmail.com',
+      },
+      to: [{ email: toEmail }],
+      subject: subject,
+      htmlContent: htmlBody,
+    };
+
+    if (attachments.length > 0) {
+      payload.attachment = attachments.map(att => ({
+        name: att.filename,
+        content: att.content, // base64 string
+      }));
+    }
+
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': process.env.BREVO_API_KEY,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Brevo API Error: ${response.status} - ${errorText}`);
+    }
+
+    const resData = await response.json();
+    return { messageId: resData.messageId };
+  } else {
+    if (!transporter) {
+      throw new Error('Transporter chưa được khởi tạo và BREVO_API_KEY không tồn tại.');
+    }
+    const mailOptions = {
+      from: `"${process.env.SMTP_FROM_NAME || 'Cinema Ticket'}" <${process.env.SMTP_USER}>`,
+      to: toEmail,
+      subject: subject,
+      html: htmlBody,
+    };
+
+    if (attachments.length > 0) {
+      mailOptions.attachments = attachments.map(att => ({
+        filename: att.filename,
+        content: att.content,
+        encoding: 'base64',
+        cid: att.cid,
+      }));
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+    return { messageId: info.messageId };
+  }
+};
 
 /**
  * Gửi E-Ticket qua email sau khi thanh toán thành công.
@@ -201,15 +269,13 @@ export const sendTicketEmail = async (toEmail, qrCodeStr, ticket) => {
 </html>`;
 
   // ── Gửi email ──────────────────────────────────────────────────────────
-  const info = await transporter.sendMail({
-    from:    `"${process.env.SMTP_FROM_NAME || 'Cinema Ticket'}" <${process.env.SMTP_USER}>`,
-    to:      toEmail,
+  const info = await sendMailHelper({
+    toEmail,
     subject: `🎬 Vé xem phim "${movieTitle}" — Đơn #${bookingId}`,
-    html:    htmlBody,
+    htmlBody: htmlBody,
     attachments: [{
       filename:    'qrcode.png',
       content:     qrImageBase64,
-      encoding:    'base64',
       cid:         'qrcode_ticket',  // Khớp với src="cid:qrcode_ticket" trong HTML
     }],
   });
@@ -282,11 +348,10 @@ export const sendOTPEmail = async ({ toEmail, name, otp, subject, heading, bodyT
 </body>
 </html>`;
 
-  const info = await transporter.sendMail({
-    from:    `"${process.env.SMTP_FROM_NAME || 'Cinema'}" <${process.env.SMTP_USER}>`,
-    to:      toEmail,
+  const info = await sendMailHelper({
+    toEmail,
     subject,
-    html:    htmlBody,
+    htmlBody: htmlBody,
   });
 
   console.log(`[Email] ✅ OTP đã gửi tới ${toEmail} (messageId: ${info.messageId})`);
