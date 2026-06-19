@@ -7,6 +7,7 @@
 // =============================================
 import nodemailer from 'nodemailer';
 import QRCode     from 'qrcode';
+import dns        from 'dns';
 
 // ── Tạo transporter (tái sử dụng, không tạo lại mỗi lần gửi) ───────────
 const transporter = nodemailer.createTransport({
@@ -16,6 +17,13 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
+  },
+  connectionTimeout: 10000, // 10s
+  greetingTimeout:   10000, // 10s
+  socketTimeout:     15000, // 15s
+  // Bắt buộc dùng IPv4 vì Render không hỗ trợ định tuyến IPv6 (gây lỗi ENETUNREACH)
+  lookup: (hostname, options, callback) => {
+    dns.lookup(hostname, { family: 4 }, callback);
   },
 });
 
