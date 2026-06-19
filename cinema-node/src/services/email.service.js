@@ -125,16 +125,6 @@ export const sendTicketEmail = async (toEmail, qrCodeStr, ticket) => {
     startTime, seatNames, totalAmount, bookingId,
   } = ticket;
 
-  // ── Render QR Code thành base64 PNG ─────────────────────────────────
-  const qrBase64 = await QRCode.toDataURL(qrCodeStr, {
-    errorCorrectionLevel: 'H',
-    width: 300,
-    margin: 2,
-    color: { dark: '#111111', light: '#FFFFFF' },
-  });
-  // Tách phần base64 thuần ra khỏi data URI prefix
-  const qrImageBase64 = qrBase64.replace(/^data:image\/png;base64,/, '');
-
   // ── Format thời gian hiển thị ────────────────────────────────────────
   const formattedTime = new Date(startTime).toLocaleString('vi-VN', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -237,7 +227,7 @@ export const sendTicketEmail = async (toEmail, qrCodeStr, ticket) => {
               
               <!-- QR Frame -->
               <div style="background:#ffffff;padding:16px;border-radius:16px;display:inline-block;box-shadow:0 10px 25px rgba(0,0,0,0.3);border:1px solid #e5e5e5;">
-                <img src="cid:qrcode_ticket" alt="Mã QR Vé Xem Phim" style="width:200px;height:200px;display:block;margin:0;">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrCodeStr)}" alt="Mã QR Vé Xem Phim" style="width:200px;height:200px;display:block;margin:0;">
               </div>
               
               <!-- Unique QR code text -->
@@ -273,11 +263,7 @@ export const sendTicketEmail = async (toEmail, qrCodeStr, ticket) => {
     toEmail,
     subject: `🎬 Vé xem phim "${movieTitle}" — Đơn #${bookingId}`,
     htmlBody: htmlBody,
-    attachments: [{
-      filename:    'qrcode.png',
-      content:     qrImageBase64,
-      cid:         'qrcode_ticket',  // Khớp với src="cid:qrcode_ticket" trong HTML
-    }],
+    attachments: [],
   });
 
   console.log(`[Email] ✅ E-Ticket #${bookingId} đã gửi tới ${toEmail} (messageId: ${info.messageId})`);

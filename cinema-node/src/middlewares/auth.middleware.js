@@ -22,7 +22,10 @@ export const authenticate = async (req, res, next) => {
 
     // Lấy thông tin user mới nhất từ DB (tránh dùng token của user đã bị xóa)
     const [rows] = await pool.query(
-      'SELECT id, name, email, phone, role, branch_id FROM users WHERE id = ?',
+      `SELECT u.id, u.name, u.email, u.phone, u.role, u.branch_id, u.member_tier, tc.discount_rate
+       FROM users u
+       LEFT JOIN tier_configs tc ON tc.tier COLLATE utf8mb4_unicode_ci = u.member_tier
+       WHERE u.id = ? LIMIT 1`,
       [decoded.id]
     );
 
@@ -30,7 +33,19 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'Tài khoản không tồn tại.' });
     }
 
-    req.user = rows[0];
+    const r = rows[0];
+    req.user = {
+      id:            r.id,
+      name:          r.name,
+      email:         r.email,
+      phone:         r.phone,
+      role:          r.role,
+      branch_id:     r.branch_id,
+      memberTier:    r.member_tier,
+      member_tier:   r.member_tier,
+      discountRate:  Number(r.discount_rate || 0),
+      discount_rate: Number(r.discount_rate || 0),
+    };
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {

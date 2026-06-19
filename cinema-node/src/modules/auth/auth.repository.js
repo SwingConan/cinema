@@ -11,7 +11,10 @@ import pool from '../../config/database.js';
  */
 const findByEmail = async (email) => {
   const [rows] = await pool.query(
-    'SELECT id, name, email, phone, role, password, remember_token FROM users WHERE email = ? LIMIT 1',
+    `SELECT u.id, u.name, u.email, u.phone, u.role, u.password, u.remember_token, u.member_tier, tc.discount_rate
+     FROM users u
+     LEFT JOIN tier_configs tc ON tc.tier COLLATE utf8mb4_unicode_ci = u.member_tier
+     WHERE u.email = ? LIMIT 1`,
     [email]
   );
   if (rows.length === 0) return null;
@@ -24,6 +27,10 @@ const findByEmail = async (email) => {
     role:          r.role,
     password:      r.password,
     rememberToken: r.remember_token,
+    memberTier:    r.member_tier,
+    member_tier:   r.member_tier,
+    discountRate:  Number(r.discount_rate || 0),
+    discount_rate: Number(r.discount_rate || 0),
   };
 };
 
@@ -32,12 +39,25 @@ const findByEmail = async (email) => {
  */
 const findById = async (id) => {
   const [rows] = await pool.query(
-    'SELECT id, name, email, phone, role FROM users WHERE id = ? LIMIT 1',
+    `SELECT u.id, u.name, u.email, u.phone, u.role, u.member_tier, tc.discount_rate
+     FROM users u
+     LEFT JOIN tier_configs tc ON tc.tier COLLATE utf8mb4_unicode_ci = u.member_tier
+     WHERE u.id = ? LIMIT 1`,
     [id]
   );
   if (rows.length === 0) return null;
   const r = rows[0];
-  return { id: r.id, name: r.name, email: r.email, phone: r.phone, role: r.role };
+  return {
+    id:            r.id,
+    name:          r.name,
+    email:         r.email,
+    phone:         r.phone,
+    role:          r.role,
+    memberTier:    r.member_tier,
+    member_tier:   r.member_tier,
+    discountRate:  Number(r.discount_rate || 0),
+    discount_rate: Number(r.discount_rate || 0),
+  };
 };
 
 /**

@@ -261,8 +261,16 @@ export default function BookingPage() {
       (sum, { item, quantity }) => sum + item.price * quantity, 0
     );
 
+  const getTierDiscountAmount = () => {
+    if (!user) return 0;
+    const discountRate = Number(user.discountRate ?? user.discount_rate ?? 0);
+    if (discountRate <= 0) return 0;
+    const subtotal = calculateSeatTotal() + calculateConcessionTotal();
+    return Math.round((subtotal * (discountRate / 100)) / 1000) * 1000;
+  };
+
   const calculateTotal = () => calculateSeatTotal() + calculateConcessionTotal();
-  const calculatePayableTotal = () => Math.max(0, calculateTotal() - (voucherValidation?.discountAmount || 0));
+  const calculatePayableTotal = () => Math.max(0, calculateTotal() - (voucherValidation?.discountAmount || 0) - getTierDiscountAmount());
 
   useEffect(() => {
     if (step !== 3 || !user) return;
@@ -637,6 +645,28 @@ export default function BookingPage() {
                           <span className="flex items-center gap-1"><Coffee className="w-3 h-3" />Bắp & Nước</span>
                           <span className="text-gray-200">{formatCurrency(calculateConcessionTotal())}</span>
                         </div>
+                      )}
+
+                      {/* Tạm tính & Giảm giá (nếu có bất kỳ giảm giá nào) */}
+                      {(getTierDiscountAmount() > 0 || (voucherValidation?.discountAmount || 0) > 0) && (
+                        <>
+                          <div className="flex justify-between text-gray-400 font-medium border-t border-[#2a2a2a] pt-1.5 mt-1">
+                            <span>Tạm tính</span>
+                            <span className="text-gray-200">{formatCurrency(calculateTotal())}</span>
+                          </div>
+                          {getTierDiscountAmount() > 0 && (
+                            <div className="flex justify-between text-emerald-400 font-bold">
+                              <span>Ưu đãi {(user.memberTier ?? user.member_tier ?? 'Bronze').toUpperCase()} (-{Number(user.discountRate ?? user.discount_rate ?? 0)}%)</span>
+                              <span>-{formatCurrency(getTierDiscountAmount())}</span>
+                            </div>
+                          )}
+                          {(voucherValidation?.discountAmount || 0) > 0 && (
+                            <div className="flex justify-between text-emerald-400 font-bold">
+                              <span>Voucher giảm giá</span>
+                              <span>-{formatCurrency(voucherValidation.discountAmount)}</span>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   )}
