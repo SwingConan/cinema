@@ -80,6 +80,8 @@ const mockBankIPN = async (req, res) => {
   }
 };
 
+import { sendTicketEmail } from '../../services/email.service.js';
+
 /**
  * GET /api/webhooks/payment/test (Legacy — giữ để tương thích cũ)
  */
@@ -99,6 +101,42 @@ const testWebhook = async (req, res) => {
     return res.json({ message: 'Webhook test thành công.', result });
   } catch (err) {
     return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * GET /api/webhooks/payment/test-email-direct
+ * Gửi mail trực tiếp để kiểm tra cấu hình SMTP không qua queue.
+ */
+const testEmailDirect = async (req, res) => {
+  const { to } = req.query;
+  if (!to) {
+    return res.status(400).json({ message: 'Thiếu email nhận. VD: ?to=test@gmail.com' });
+  }
+  try {
+    const result = await sendTicketEmail(to, 'MOCK_QR_CODE_123456', {
+      movieTitle: 'Test Phim Direct',
+      roomName: 'Phòng Chiếu 1',
+      roomType: 'IMAX',
+      startTime: new Date(),
+      seatNames: 'A1, A2',
+      totalAmount: 150000,
+      bookingId: 999
+    });
+    return res.json({ message: 'Gửi mail direct thành công', result });
+  } catch (err) {
+    return res.status(500).json({
+      message: 'Gửi mail direct thất bại',
+      error: err.message,
+      stack: err.stack,
+      env: {
+        SMTP_HOST: process.env.SMTP_HOST || 'default: smtp.gmail.com',
+        SMTP_PORT: process.env.SMTP_PORT || 'default: 465',
+        SMTP_USER: process.env.SMTP_USER || 'MISSING',
+        SMTP_PASS_EXISTS: !!process.env.SMTP_PASS,
+        SMTP_FROM_NAME: process.env.SMTP_FROM_NAME || 'default: Cinema Ticket'
+      }
+    });
   }
 };
 
@@ -176,4 +214,4 @@ const handleSepayWebhook = async (req, res) => {
   }
 };
 
-export const WebhookController = { handlePaymentIPN, mockBankIPN, testWebhook, handleSepayWebhook };
+export const WebhookController = { handlePaymentIPN, mockBankIPN, testWebhook, handleSepayWebhook, testEmailDirect };

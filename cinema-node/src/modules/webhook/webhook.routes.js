@@ -24,6 +24,11 @@ router.post('/mock-bank', WebhookController.mockBankIPN);
 router.get('/payment/test', WebhookController.testWebhook);
 
 /**
+ * GET /api/webhooks/payment/test-email-direct
+ */
+router.get('/payment/test-email-direct', WebhookController.testEmailDirect);
+
+/**
  * POST /api/webhooks/sepay
  * Webhook thật từ SePay — tự động detect khi có tiền vào tài khoản.
  * SePay gửi: { id, gateway, transferAmount, content, referenceCode, ... }
