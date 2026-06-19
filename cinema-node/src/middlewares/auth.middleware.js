@@ -14,7 +14,7 @@ export const authenticate = async (req, res, next) => {
     : null;
 
   if (!token) {
-    return res.status(401).json({ message: 'Không có token xác thực.' });
+    return res.status(401).json({ message: 'Vui lòng đăng nhập để thực hiện tác vụ này.' });
   }
 
   try {

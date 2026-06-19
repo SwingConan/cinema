@@ -189,6 +189,11 @@ export default function BookingPage() {
   }, [showtimeId]);
 
   const handleSeatSelect = async (seat) => {
+    if (!user) {
+      alert("Vui lòng đăng nhập để tiến hành đặt vé.");
+      navigate("/login");
+      return;
+    }
     const exists = selectedSeats.find((s) => s.id === seat.id);
 
     if (exists) {
